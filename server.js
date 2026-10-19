@@ -5,6 +5,13 @@ const path = require('path');
 const crypto = require('crypto');
 const auth = require('./auth');
 
+// Cada línea del log (data/server.log) lleva fecha y hora
+const stamp = () => new Date().toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+for (const k of ['log', 'warn', 'error']) {
+  const orig = console[k].bind(console);
+  console[k] = (...args) => orig(`[${stamp()}]`, ...args);
+}
+
 const PORT = process.env.PORT || 3000;
 const DATA_DIR = path.join(__dirname, 'data');
 const RATIOS_PATH = path.join(DATA_DIR, 'ratios.json');

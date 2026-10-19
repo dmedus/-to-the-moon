@@ -1,0 +1,16 @@
+# Corre las pruebas (npm test) en cada push y pull request. La app no tiene dependencias: no hace falta npm install.
+name: Pruebas
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  pruebas:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm test
