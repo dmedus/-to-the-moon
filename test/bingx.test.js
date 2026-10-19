@@ -117,6 +117,35 @@ test('coin-M: si se cierra y se abre otra posición, el funding vuelve a empezar
   assert.equal(db.futures[0].fundingLast, undefined);
 });
 
+test('coin-M con la PC apagada: junta los cobros y descuenta las órdenes de todo el período', () => {
+  const db = base();
+  const pos = (bal, orders) => coin(bal, orders, { notional: 2000 });
+  mergeSnapshot(db, snap(T, [pos(0.02)]));
+  // vuelve 3 días después (9 cobros); en el medio hubo una orden de hace más de 2 días que sumó 0,001 BTC
+  const back = T + 3 * 24 * H;
+  mergeSnapshot(db, snap(back, [pos(0.02095, [[T + H, 0.001]])]));
+  const f = db.futures[0];
+  close(f.fundingLast, -0.00005 * 100000);
+  assert.equal(f.fundingLastCount, 9);
+  close(f.fundingTotal, -5);
+  assert.equal(f.fundingMissed, undefined);
+});
+
+test('coin-M: un cambio imposible para un funding (transferencia) queda sin dato y no se suma', () => {
+  const db = base();
+  const pos = (bal) => coin(bal, [], { notional: 2000 });
+  mergeSnapshot(db, snap(T, [pos(0.02)]));
+  mergeSnapshot(db, snap(T + 6 * 6e4, [pos(0.03)])); // +0,01 BTC = +1.000 USD en un cobro sobre 2.000 de tamaño
+  assert.equal(db.futures[0].fundingTotal, 0);
+  assert.equal(db.futures[0].fundingLast, undefined);
+  assert.equal(db.futures[0].fundingMissed, 1);
+  // el siguiente cobro normal se suma y lo sin dato se conserva
+  mergeSnapshot(db, snap(T + 8 * H + 6 * 6e4, [pos(0.029995)]));
+  close(db.futures[0].fundingLast, -0.5);
+  assert.equal(db.futures[0].fundingLastCount, 1);
+  assert.equal(db.futures[0].fundingMissed, 1);
+});
+
 // Bitget: solo da el acumulado; el último sale de la diferencia en la moneda del margen
 const bg = (t, totalBase, mark) => snap(t, [{ externalId: 's', status: 'open', market: 'COIN-M', markPrice: mark, fundingTotalBase: totalBase, fundingTotal: totalBase * mark }], [], 'Bitget');
 
@@ -132,6 +161,15 @@ test('Bitget coin-M: al cruzar una hora de funding, el último es la diferencia 
   mergeSnapshot(db, bg(T, -0.1, 100), 'futuros-bitget');
   mergeSnapshot(db, bg(T + 6 * 6e4, -0.105, 101), 'futuros-bitget');
   close(db.futures[0].fundingLast, -0.505);
+  assert.equal(db.futures[0].fundingLastCount, 1);
   mergeSnapshot(db, bg(T + 9 * 6e4, -0.105, 102), 'futuros-bitget');
   close(db.futures[0].fundingLast, -0.505);
+});
+
+test('Bitget con la PC apagada: el último indica cuántos cobros junta', () => {
+  const db = { portfolios: [{ id: 'futuros-bitget' }] };
+  mergeSnapshot(db, bg(T, -0.1, 100), 'futuros-bitget');
+  mergeSnapshot(db, bg(T + 24 * H, -0.13, 100), 'futuros-bitget');
+  close(db.futures[0].fundingLast, -3);
+  assert.equal(db.futures[0].fundingLastCount, 3);
 });

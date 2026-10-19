@@ -205,17 +205,21 @@ async function fetchSnapshot(keys, days = 90) {
         // BingX no da el historial de funding de coin-M: se deduce del saldo entre sincronizaciones (ver coinmFunding)
         fundingRate: n(fr?.lastFundingRate), fundingNextTime: n(fr?.nextFundingTime), fundingHours: 8,
         walletBase: n(b?.balance),
-        _orders: orders.filter((o) => Number(o.updateTime) >= end - 2 * DAY).map((o) => [Number(o.updateTime), Number(o.profit || 0) + Number(o.commission || 0)]),
+        _orders: orders.map((o) => [Number(o.updateTime), Number(o.profit || 0) + Number(o.commission || 0)]),
       });
     }
   }
   return { exchange: 'BingX', fetched: new Date().toISOString(), accounts, open, closed };
 }
 
-// Funding de coin-M deducido: si entre la sincronización anterior y esta hubo un cobro de funding (cada 8 h, 00/08/16 UTC),
+// Funding de coin-M deducido: si entre la sincronización anterior y esta hubo cobros de funding (cada 8 h, 00/08/16 UTC),
 // lo que cambió el saldo de la billetera menos el resultado y las comisiones de las órdenes de ese lapso es el funding.
-// Se acumula desde que la app empieza a seguir la posición (fundingFrom). Una transferencia en ese lapso lo distorsiona.
+// Se acumula desde que la app empieza a seguir la posición (fundingFrom). Si la PC estuvo apagada, el cambio junta
+// varios cobros (fundingLastCount). Si es más de lo que puede cobrar un funding (seguramente una transferencia),
+// no se suma: esos cobros quedan sin dato (fundingMissed).
 const FUNDING_EVERY = 8 * 36e5;
+const MAX_FUNDING_RATE = 0.01; // por cobro; los exchanges limitan la tasa muy por debajo
+const fundingSlots = (since, now) => Math.floor(now / FUNDING_EVERY) - Math.floor(since / FUNDING_EVERY);
 function coinmFunding(t, prev, fetched) {
   const orders = t._orders;
   delete t._orders;
@@ -226,14 +230,18 @@ function coinmFunding(t, prev, fetched) {
     return;
   }
   const since = Date.parse(prev.updated);
-  Object.assign(t, { fundingTotal: prev.fundingTotal ?? 0, fundingFrom: prev.fundingFrom ?? since, fundingLast: prev.fundingLast, fundingLastTime: prev.fundingLastTime });
-  if (Math.floor(now / FUNDING_EVERY) <= Math.floor(since / FUNDING_EVERY)) return;
+  Object.assign(t, {
+    fundingTotal: prev.fundingTotal ?? 0, fundingFrom: prev.fundingFrom ?? since, fundingLast: prev.fundingLast, fundingLastTime: prev.fundingLastTime,
+    fundingLastCount: prev.fundingLastCount, fundingMissed: prev.fundingMissed,
+  });
+  const slots = fundingSlots(since, now);
+  if (slots <= 0) return;
   const realized = (orders || []).filter(([time]) => time > since && time <= now).reduce((s, [, v]) => s + v, 0);
   const delta = t.walletBase - prev.walletBase - realized;
-  if (Math.abs(delta) > 1e-10) {
-    const usd = delta * t.markPrice;
-    Object.assign(t, { fundingTotal: t.fundingTotal + usd, fundingLast: usd, fundingLastTime: Math.floor(now / FUNDING_EVERY) * FUNDING_EVERY });
-  }
+  if (Math.abs(delta) <= 1e-10) return;
+  const usd = delta * t.markPrice;
+  if (t.notional && Math.abs(usd) > slots * Math.abs(t.notional) * MAX_FUNDING_RATE) { t.fundingMissed = (t.fundingMissed || 0) + slots; return; }
+  Object.assign(t, { fundingTotal: t.fundingTotal + usd, fundingLast: usd, fundingLastCount: slots, fundingLastTime: Math.floor(now / FUNDING_EVERY) * FUNDING_EVERY });
 }
 
 // Guarda un snapshot en la base: cuentas y abiertas se reemplazan; las cerradas se acumulan
@@ -263,9 +271,10 @@ function mergeSnapshot(db, snap, pid = PORTFOLIO_ID) {
     const prev = prevOpen.get(t.externalId);
     if (t.fundingLast != null || t.fundingTotalBase == null || prev?.fundingTotalBase == null) continue;
     const now = Date.parse(snap.fetched), diff = t.fundingTotalBase - prev.fundingTotalBase;
-    if (Math.floor(now / FUNDING_EVERY) > Math.floor(Date.parse(prev.updated) / FUNDING_EVERY) && Math.abs(diff) > 1e-10) {
-      Object.assign(t, { fundingLast: t.market === 'COIN-M' ? diff * t.markPrice : diff, fundingLastTime: Math.floor(now / FUNDING_EVERY) * FUNDING_EVERY });
-    } else if (prev.fundingLast != null) Object.assign(t, { fundingLast: prev.fundingLast, fundingLastTime: prev.fundingLastTime });
+    const slots = fundingSlots(Date.parse(prev.updated), now);
+    if (slots > 0 && Math.abs(diff) > 1e-10) {
+      Object.assign(t, { fundingLast: t.market === 'COIN-M' ? diff * t.markPrice : diff, fundingLastCount: slots, fundingLastTime: Math.floor(now / FUNDING_EVERY) * FUNDING_EVERY });
+    } else if (prev.fundingLast != null) Object.assign(t, { fundingLast: prev.fundingLast, fundingLastCount: prev.fundingLastCount, fundingLastTime: prev.fundingLastTime });
   }
   for (const t of snap.open) kept.push({ id: crypto.randomUUID().slice(0, 10), portfolioId: pid, note: '', ...t, updated: snap.fetched });
   db.futures = kept;
