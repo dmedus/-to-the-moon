@@ -148,8 +148,16 @@ function computeFutures(p) {
   for (const x of positions) x.weight = value ? x.value / value : 0;
   const unrealized = positions.reduce((a, x) => a + (+x.pnl || 0), 0);
   const deposits = state.db.deposits.filter((d) => d.portfolioId === p.id).reduce((a, d) => a + +d.amount, 0);
+  // Costos (negativos = pagados). El funding de algunas cerradas no se conoce (BingX coin-M): se cuentan aparte.
+  const costs = {
+    fees: closed.reduce((a, x) => a + (+x.fees || 0), 0),
+    funding: closed.reduce((a, x) => a + (+x.funding || 0), 0),
+    fundingUnknown: closed.filter((x) => x.funding == null).length,
+    openFunding: positions.some((x) => x.fundingTotal != null) ? positions.reduce((a, x) => a + (+x.fundingTotal || 0), 0) : null,
+    openFundingPerDay: positions.some((x) => x.fundEst) ? positions.reduce((a, x) => a + (x.fundEst?.perDay || 0), 0) : null,
+  };
   return {
-    p, acc, positions, closed, value, unrealized, deposits, cost: value - unrealized,
+    p, acc, positions, closed, value, unrealized, deposits, cost: value - unrealized, costs,
     realized: closed.reduce((a, x) => a + (+x.pnl || 0), 0), divTotal: 0, dayChg: 0, missing: [],
   };
 }

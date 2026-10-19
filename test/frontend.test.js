@@ -37,12 +37,18 @@ test('ROE: usa el del exchange si viene; si no, PnL sobre el margen inicial', ()
 test('computeFutures: valor, PnL abierto, "si cierro ahora" y realizado', () => {
   run(`state.db = { deposits: [], futuresAccounts: { f: { accounts: [{ equityUSD: 1000 }] } }, futures: [
     { portfolioId: 'f', status: 'open', margin: 100, pnl: 20, notional: 1000, feesPaid: -2, fundingRate: 0.0001, side: 'LONG' },
-    { portfolioId: 'f', status: 'closed', margin: 50, pnl: 10 },
+    { portfolioId: 'f', status: 'closed', margin: 50, pnl: 10, fees: -1, funding: -0.5 },
+    { portfolioId: 'f', status: 'closed', margin: 50, pnl: 5, fees: -2, funding: null },
     { portfolioId: 'otra', status: 'closed', margin: 50, pnl: 99 } ] };`);
   const c = run(`computeFutures({ id: 'f', broker: 'BingX' })`);
   assert.equal(c.value, 1000);
   assert.equal(c.unrealized, 20);
-  assert.equal(c.realized, 10);
+  assert.equal(c.realized, 15);
+  assert.equal(c.costs.fees, -3);
+  assert.equal(c.costs.funding, -0.5);
+  assert.equal(c.costs.fundingUnknown, 1); // la de funding desconocido no se cuenta como 0 pagado
+  assert.equal(c.costs.openFunding, null);
+  close(c.costs.openFundingPerDay, -0.3);
   const [x] = c.positions;
   close(x.net, 20 - 2 - 1000 * 0.0005); // PnL + ya pagado − comisión de cierre estimada
   close(x.fundEst.next, -0.1);

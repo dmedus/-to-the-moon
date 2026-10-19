@@ -445,6 +445,8 @@ function viewFutures(p) {
   const openMargin = c.positions.reduce((a, x) => a + x.cost, 0);
   const free = c.value - c.positions.reduce((a, x) => a + x.value, 0);
   const closedMargin = c.closed.reduce((a, x) => a + (+x.margin || 0), 0);
+  const fundingFrom = Math.min(...c.positions.map((x) => +x.fundingFrom || Infinity)); // coin-M de BingX: se sigue desde esa fecha
+  const closedCost = c.costs.fees + c.costs.funding, closedGross = c.realized - closedCost; // resultado antes de comisiones y funding
   const bySym = {};
   for (const x of c.closed) {
     const k = x.symbol + '|' + x.market;
@@ -509,6 +511,8 @@ function viewFutures(p) {
     ${kpi('PnL abierto', signed(c.unrealized), openMargin ? `${pct(c.unrealized / openMargin)} sobre el margen` : `${c.positions.length} posiciones`, cls(c.unrealized))}
     ${kpi('Resultado cerradas', signed(c.realized), closedMargin ? `${pct(c.realized / closedMargin)} sobre ${usd(closedMargin)} de margen` : null, cls(c.realized))}
     ${kpi('Operaciones cerradas', String(c.closed.length), c.closed.length ? `${Math.round((wins / c.closed.length) * 100)}% ganadoras` : null)}
+    ${c.closed.length ? kpi('Costos de las cerradas', signed(closedCost), `Comisiones ${signed(c.costs.fees)} · funding ${signed(c.costs.funding)}${c.costs.fundingUnknown ? '*' : ''}${closedGross > 0 && closedCost < 0 ? ` · se llevaron el ${num((-closedCost / closedGross) * 100, 1)}% de la ganancia bruta` : ''}`, cls(closedCost)) : ''}
+    ${c.costs.openFunding != null ? kpi('Funding de las abiertas', signed(c.costs.openFunding), `pagado hasta ahora${c.costs.openFundingPerDay != null ? ` · ≈ ${signed(c.costs.openFundingPerDay)} por día` : ''}${isFinite(fundingFrom) ? ` · coin-M desde ${dt(fundingFrom)}` : ''}`, cls(c.costs.openFunding)) : ''}
     ${c.deposits ? kpi('Resultado vs aportes', signed(c.value - c.deposits), `${pct((c.value - c.deposits) / c.deposits)} sobre ${usd(c.deposits)} aportados`, cls(c.value - c.deposits)) : ''}
   </div>
   <div class="card section">
@@ -551,17 +555,22 @@ function viewFutures(p) {
   ${ex === 'bitget' ? dobleSaylorCard(p, c) : balasCard(p, c)}
   <div class="card section">
     <h2>Operaciones cerradas <span class="muted small">(resultado neto de comisiones y funding)</span></h2>
+    ${c.costs.fundingUnknown ? `<p class="small muted" style="margin-top:0">* ${c.costs.fundingUnknown === 1 ? 'Una operación no tiene' : c.costs.fundingUnknown + ' operaciones no tienen'} el funding informado (BingX no lo da en coin-M): su resultado ya lo incluye, pero no se puede separar.</p>` : ''}
     <div class="table-wrap"><table>
       <thead><tr>${th(C, 'close', 'Cierre', false)}${th(C, 'symbol', 'Par', false)}<th>Cuenta</th><th>Lado</th>${th(C, 'leverage', 'Apal.')}
         ${th(C, 'entries', 'Entradas')}${th(C, 'entryPrice', 'Precio entrada')}${th(C, 'exitPrice', 'Precio salida')}${th(C, 'notional', 'Tamaño máx.')}${th(C, 'margin', 'Margen')}
-        ${th(C, 'pnl', 'Resultado')}${th(C, 'pct', '% s/margen')}${th(C, 'hours', 'Duración')}</tr></thead>
+        ${th(C, 'fees', 'Comisiones')}${th(C, 'funding', 'Funding')}${th(C, 'pnl', 'Resultado')}${th(C, 'pct', '% s/margen')}${th(C, 'hours', 'Duración')}</tr></thead>
       <tbody>${closed.length ? closed.map((x) => `<tr>
         <td>${dt(x.close)}</td><td class="ticker">${esc(x.symbol)}</td><td>${esc(x.market)}</td><td>${side(x.side)}</td>
         <td class="num">${x.leverage ? num(+x.leverage) + 'x' : '—'}</td><td class="num">${x.entries ?? '—'}</td>
         <td class="num">${price(+x.entryPrice || null)}</td><td class="num">${price(+x.exitPrice || null)}</td><td class="num">${usd(+x.notional)}</td><td class="num">${usd(+x.margin)}</td>
+        <td class="num ${cls(+x.fees)}">${x.fees != null ? signed(+x.fees) : '—'}</td>
+        <td class="num ${cls(+x.funding)}">${x.funding != null ? signed(+x.funding) : '<span class="muted" title="BingX no informa el funding de coin-M">—*</span>'}</td>
         <td class="num ${cls(+x.pnl)}"><b>${signed(+x.pnl)}</b>${x.pnlBase != null ? ` <span class="muted small">(${num(+x.pnlBase, 6)} ${esc(x.symbol.split(/[-_]|USD/)[0])})</span>` : ''}</td>
-        <td class="num">${badge(x.pct)}</td><td class="num">${dur(x.hours)}</td></tr>`).join('') : '<tr><td colspan="13" class="empty">Sin operaciones cerradas.</td></tr>'}</tbody>
-      ${closed.length ? `<tfoot><tr><td colspan="9">Total</td><td class="num">${usd(closedMargin)}</td><td class="num ${cls(c.realized)}"><b>${signed(c.realized)}</b></td>
+        <td class="num">${badge(x.pct)}</td><td class="num">${dur(x.hours)}</td></tr>`).join('') : '<tr><td colspan="15" class="empty">Sin operaciones cerradas.</td></tr>'}</tbody>
+      ${closed.length ? `<tfoot><tr><td colspan="9">Total</td><td class="num">${usd(closedMargin)}</td>
+        <td class="num ${cls(c.costs.fees)}">${signed(c.costs.fees)}</td><td class="num ${cls(c.costs.funding)}">${signed(c.costs.funding)}${c.costs.fundingUnknown ? '*' : ''}</td>
+        <td class="num ${cls(c.realized)}"><b>${signed(c.realized)}</b></td>
         <td class="num">${badge(closedMargin ? c.realized / closedMargin : null)}</td><td></td></tr></tfoot>` : ''}
     </table></div>
   </div>`;
