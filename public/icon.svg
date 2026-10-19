@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#103b9c"/>
+      <stop offset="1" stop-color="#07215f"/>
+    </linearGradient>
+    <linearGradient id="flame" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff2a8"/>
+      <stop offset="1" stop-color="#fdb913"/>
+    </linearGradient>
+    <mask id="crescent">
+      <rect width="64" height="64" fill="#fff"/>
+      <circle cx="44" cy="12" r="8" fill="#000"/>
+    </mask>
+    <clipPath id="tile"><rect width="64" height="64" rx="14"/></clipPath>
+  </defs>
+  <g clip-path="url(#tile)">
+    <rect width="64" height="64" fill="url(#sky)"/>
+    <rect y="27" width="64" height="12" fill="#fdb913"/>
+  </g>
+  <circle cx="49" cy="15" r="9" fill="#fdb913" mask="url(#crescent)"/>
+  <g fill="#fff">
+    <circle cx="13" cy="12" r="1.3"/>
+    <circle cx="25" cy="7" r="0.9" opacity=".8"/>
+    <circle cx="56" cy="50" r="1.1" opacity=".85"/>
+    <circle cx="9" cy="20" r="0.9" opacity=".7"/>
+    <circle cx="40" cy="57" r="0.9" opacity=".6"/>
+  </g>
+  <g transform="rotate(45 30 36)">
+    <path d="M30 15c6 6 7.5 15 6 26h-12c-1.5-11 0-20 6-26z" fill="#ffffff" stroke="#07215f" stroke-width="1.2"/>
+    <path d="M30 15.8c5.4 5.8 6.7 14.5 5.3 24.7h-2.6c.9-10.6-.4-18.3-2.7-24.7z" fill="#d6dff0"/>
+    <circle cx="30" cy="27" r="3.6" fill="#103b9c" stroke="#fdb913" stroke-width="1.4"/>
+    <path d="M24.4 32.5 18 44l6.4-3z" fill="#fdb913" stroke="#07215f" stroke-width="1.2" stroke-linejoin="round"/>
+    <path d="M35.6 32.5 42 44l-6.4-3z" fill="#fdb913" stroke="#07215f" stroke-width="1.2" stroke-linejoin="round"/>
+    <path d="M27.5 41h5v2.5h-5z" fill="#07215f"/>
+    <path d="M26.5 43.5h7L30 55z" fill="url(#flame)"/>
+  </g>
+</svg>

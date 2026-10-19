@@ -1,0 +1,11 @@
+# Datos personales y secretos: claves de exchanges (.env, keys.enc.json, master.key), login (auth.json),
+# la base (db.json), usuarios, backups y logs. Nada de esto va al repositorio.
+data/
+
+# Copias manuales viejas
+*.bak
+
+node_modules/
+
+# Imágenes de estrategia (material de terceros): quedan solo en la PC; la app las lista de la carpeta
+public/reglas/

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>To the Moon</title>
+  <link rel="icon" href="icon.svg">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#103b9c">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="To the Moon">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="auth-page">
+  <main class="auth-card card">
+    <div class="auth-brand">
+      <img src="icon.svg" width="40" height="40" alt="">
+      <div><h1>To the Moon</h1><div class="muted small">Ingresá para ver tus inversiones</div></div>
+    </div>
+    <form id="login-form" autocomplete="on">
+      <div class="field"><label for="u">Usuario</label><input id="u" name="username" autocomplete="username" required autocapitalize="none" spellcheck="false"></div>
+      <div class="field"><label for="p">Contraseña</label><input id="p" name="password" type="password" autocomplete="current-password" required></div>
+      <div class="field" id="code-field" hidden>
+        <label for="c">Código de 6 dígitos</label>
+        <input id="c" name="code" inputmode="numeric" pattern="\d{6}" maxlength="6" autocomplete="one-time-code" placeholder="De tu app autenticadora">
+        <span class="hint">Solo para tu usuario. El invitado no lo necesita.</span>
+      </div>
+      <div class="warn" id="err" role="alert"></div>
+      <button class="btn primary big" type="submit" id="btn">Ingresar</button>
+    </form>
+    <p class="muted small auth-foot">¿Estás en una computadora que no es tuya? Usá una ventana de incógnito y no guardes la contraseña.</p>
+  </main>
+  <script src="login.js"></script>
+</body>
+</html>

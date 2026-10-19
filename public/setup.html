@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Configurar To the Moon</title>
+  <link rel="icon" href="icon.svg">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="auth-page">
+  <main class="auth-card card wide">
+    <div class="auth-brand">
+      <img src="icon.svg" width="40" height="40" alt="">
+      <div><h1>Configurar acceso</h1><div class="muted small">Creá tu usuario. Esto se hace una sola vez, desde esta PC.</div></div>
+    </div>
+
+    <div id="not-local" class="warn" hidden>
+      La configuración inicial solo se puede hacer desde la PC donde corre la app, entrando a <b>http://localhost:3000</b>.
+    </div>
+
+    <form id="step1" hidden>
+      <div class="field"><label for="u">Usuario</label><input id="u" autocomplete="username" required autocapitalize="none" spellcheck="false" minlength="3" maxlength="40"></div>
+      <div class="field"><label for="p">Contraseña</label><input id="p" type="password" autocomplete="new-password" required minlength="8">
+        <span class="hint">Mínimo 8 caracteres. Mejor una frase larga que no uses en otro lado.</span></div>
+      <div class="field"><label for="p2">Repetí la contraseña</label><input id="p2" type="password" autocomplete="new-password" required minlength="8"></div>
+      <label class="check"><input type="checkbox" id="totp" checked> Activar código de 6 dígitos (2FA) <span class="muted small">— recomendado si vas a entrar desde la PC del trabajo</span></label>
+      <div class="warn" id="err1" role="alert"></div>
+      <button class="btn primary big" type="submit">Continuar</button>
+    </form>
+
+    <form id="step2" hidden>
+      <ol class="small steps">
+        <li>Instalá en tu celular <b>Google Authenticator</b> (o Microsoft Authenticator, Authy…).</li>
+        <li>Tocá <b>+</b> y escaneá este código QR:</li>
+      </ol>
+      <div id="qr" class="qr"></div>
+      <p class="small muted">¿No podés escanear? Elegí "Ingresar clave de configuración" y escribí:<br><code id="secret" class="secret"></code></p>
+      <div class="field"><label for="c">Código que muestra la app</label><input id="c" inputmode="numeric" pattern="\d{6}" maxlength="6" autocomplete="one-time-code" required></div>
+      <div class="warn" id="err2" role="alert"></div>
+      <button class="btn primary big" type="submit">Confirmar y entrar</button>
+    </form>
+  </main>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="setup.js"></script>
+</body>
+</html>
