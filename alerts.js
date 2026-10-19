@@ -56,7 +56,13 @@ module.exports = function createAlerts({ DATA_DIR, userDir, readDb, activeUids, 
     pending.set(code, { uid, until: Date.now() + 15 * 60e3 });
     return { code, url: `https://t.me/${bot()?.username}?start=${code}` };
   }
-  let offset = 0, polling = false;
+  // Si Telegram no responde, se anota una sola vez (y otra cuando vuelve) y las consultas automáticas se espacian
+  // de 15 s hasta 5 min. Mientras alguien está conectando su Telegram se consulta siempre.
+  let offset = 0, polling = false, pollFails = 0, pollSkip = 0;
+  function scheduledPoll() {
+    if (pollSkip > 0 && !pending.size) { pollSkip--; return; }
+    return poll();
+  }
   async function poll() {
     if (polling || !bot()) return;
     polling = true;
@@ -76,8 +82,13 @@ module.exports = function createAlerts({ DATA_DIR, userDir, readDb, activeUids, 
           await send(m.chat.id, 'Hola 👋 Para recibir alertas, entrá a To the Moon → <b>Ajustes → Alertas</b> y tocá "Conectar mi Telegram".');
         }
       }
-    } catch (e) { log('Telegram (getUpdates):', e.message); }
-    finally { polling = false; }
+      if (pollFails) log(`Telegram (getUpdates): volvió a responder después de ${pollFails} intentos fallidos`);
+      pollFails = 0; pollSkip = 0;
+    } catch (e) {
+      if (!pollFails) log('Telegram (getUpdates):', e.message, '(se reintenta cada vez más espaciado; no se vuelve a anotar hasta que responda)');
+      pollFails++;
+      pollSkip = Math.min(2 ** (pollFails - 1), 20) - 1;
+    } finally { polling = false; }
   }
 
   // ---------- Evaluación ----------
@@ -244,7 +255,7 @@ Llevás ${usd(-f.fundingTotal)} pagados` : ''}`);
       targets: a.targets.sort((x, y) => (x.done ? 1 : 0) - (y.done ? 1 : 0) || y.created - x.created).slice(0, 80) };
   }
 
-  setInterval(poll, 15_000);
+  setInterval(scheduledPoll, 15_000);
   setInterval(run, 3 * 60_000);
   setTimeout(run, 20_000);
   // Manda un archivo al chat del dueño (lo usa el backup diario). Si no conectó Telegram, avisa con un error.
@@ -261,5 +272,5 @@ Llevás ${usd(-f.fundingTotal)} pagados` : ''}`);
   }
   const ownerLinked = () => !!(bot() && load('owner').chatId);
 
-  return { status, setBot, removeBot, linkCode, unlink, test, setRules, addTarget, removeTarget, poll, run, sendFileToOwner, ownerLinked };
+  return { status, setBot, removeBot, linkCode, unlink, test, setRules, addTarget, removeTarget, poll, run, sendFileToOwner, ownerLinked, _test: { scheduledPoll } };
 };

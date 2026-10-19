@@ -6,7 +6,9 @@ const os = require('os');
 const path = require('path');
 
 const sent = [];
+let telegramDown = false, getUpdatesCalls = 0;
 global.fetch = async (url, opts) => {
+  if (String(url).endsWith('/getUpdates')) { getUpdatesCalls++; if (telegramDown) throw new Error('fetch failed'); }
   if (String(url).endsWith('/sendMessage')) sent.push(JSON.parse(opts.body).text);
   return { ok: true, json: async () => ({ ok: true, result: [] }) };
 };
@@ -18,9 +20,10 @@ const createAlerts = require('../alerts');
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'alertas-'));
 let db;
+const logs = [];
 const alerts = createAlerts({
   DATA_DIR: dir, userDir: () => dir, readDb: () => db, activeUids: () => ['owner'],
-  keystore: { get: () => ({ token: 'x', username: 'bot' }) }, quotes: {}, dividendInfo: async () => ({}), log: () => {},
+  keystore: { get: () => ({ token: 'x', username: 'bot' }) }, quotes: {}, dividendInfo: async () => ({}), log: (...a) => logs.push(a.join(' ')),
 });
 Object.assign(global, timers);
 fs.writeFileSync(path.join(dir, 'alerts.json'), JSON.stringify({ chatId: 1, rules: { roe: [], liqPct: 0, fundingDayPct: 0.5, exdiv: false, coupons: false } }));
@@ -57,6 +60,35 @@ test('se rearma solo cuando baja del 70% del umbral', async () => {
 test('no avisa si la posición cobra funding (short con tasa positiva)', async () => {
   await check(0.0001); // rearma
   assert.deepEqual(await check(0.0005, { side: 'SHORT' }), []);
+});
+
+test('Telegram caído: se anota una vez, se espacian los reintentos y se avisa cuando vuelve', async () => {
+  const { scheduledPoll } = alerts._test;
+  telegramDown = true; logs.length = 0; getUpdatesCalls = 0;
+  for (let i = 0; i < 40; i++) await scheduledPoll(); // 40 ticks de 15 s = 10 minutos
+  assert.equal(logs.length, 1);
+  assert.match(logs[0], /fetch failed/);
+  // intentos en los ticks 1, 2, 4, 8, 16, 32 (esperas de 15 s, 30 s, 1, 2, 4 min) y después cada 5 min
+  assert.equal(getUpdatesCalls, 6);
+  telegramDown = false;
+  for (let i = 0; i < 20 && getUpdatesCalls === 6; i++) await scheduledPoll();
+  assert.match(logs[1], /volvió a responder después de 6 intentos fallidos/);
+  getUpdatesCalls = 0;
+  for (let i = 0; i < 3; i++) await scheduledPoll(); // de nuevo cada 15 s
+  assert.equal(getUpdatesCalls, 3);
+  assert.equal(logs.length, 2);
+});
+
+test('mientras alguien conecta su Telegram no se espera', async () => {
+  const { scheduledPoll } = alerts._test;
+  telegramDown = true;
+  for (let i = 0; i < 5; i++) await scheduledPoll();
+  alerts.linkCode('owner');
+  getUpdatesCalls = 0;
+  for (let i = 0; i < 3; i++) await scheduledPoll();
+  assert.equal(getUpdatesCalls, 3);
+  telegramDown = false;
+  await scheduledPoll();
 });
 
 test.after(() => fs.rmSync(dir, { recursive: true, force: true }));
