@@ -32,7 +32,6 @@ document.addEventListener('click', (e) => {
     case 'del-div':
       if (!confirm('¿Borrar este dividendo?')) return;
       db.dividends = db.dividends.filter((t) => t.id !== id); save(); return render();
-    case 'sync-pionex':
     case 'alloc-mode':
       state.allocMode[pid] = a.dataset.mode; return render();
     case 'ver-regla': return showRegla(+a.dataset.i);

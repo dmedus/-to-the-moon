@@ -54,3 +54,18 @@ test('computeFutures: valor, PnL abierto, "si cierro ahora" y realizado', () => 
   close(x.fundEst.next, -0.1);
   close(x.weight, 0.12);
 });
+
+test('sector: nombre en castellano, ETF aparte y las ligadas a Bitcoin juntas', () => {
+  assert.equal(ctx.sectorOf('GOOGL', { sector: 'Communication Services' }), 'Comunicaciones');
+  assert.equal(ctx.sectorOf('SPXL', { kind: 'ETF' }), 'ETF / índice');
+  assert.equal(ctx.sectorOf('HUT', { sector: 'Financial Services' }), 'Bitcoin / cripto');
+  assert.equal(ctx.sectorOf('XYZ', { error: 'sin datos' }), 'Sin dato');
+  assert.equal(ctx.sectorOf('XYZ', undefined), null); // todavía no llegó el dato
+});
+
+test('sectorGroups: suma por sector y ordena de mayor a menor', () => {
+  const info = { NVDA: { sector: 'Technology' }, AVGO: { sector: 'Technology' }, GS: { sector: 'Financial Services' } };
+  const g = ctx.sectorGroups([{ ticker: 'GS', value: 50 }, { ticker: 'NVDA', value: 100 }, { ticker: 'AVGO', value: 30 }, { ticker: 'MSTR', value: 70 }], (t) => info[t], (x) => x.value);
+  assert.deepEqual(JSON.parse(JSON.stringify(g.map((x) => [x.sector, x.value]))), [['Tecnología', 130], ['Bitcoin / cripto', 70], ['Financiero', 50]]);
+  assert.deepEqual([...g[0].tickers.map((t) => t.ticker)], ['NVDA', 'AVGO']);
+});

@@ -14,7 +14,7 @@ const state = {
   role: null, // 'owner' (ve y edita todo) o 'guest' (solo lectura, sin montos)
   hide: false, // ocultar montos en dólares y pesos
   sort: {},
-  allocMode: {}, // por cartera: 'value' (valor actual) o 'cost' (invertido)
+  allocMode: {}, // por cartera: 'value' (valor actual), 'cost' (invertido) o 'sector'
   reglas: [], // imágenes de app/public/reglas
   filters: { ops: { pid: '', q: '', side: '' } },
 };
@@ -408,6 +408,34 @@ function labelTableCells(root) {
 // ================= Componentes =================
 function kpi(label, value, delta, deltaCls = '') {
   return `<div class="card kpi"><div class="label">${label}</div><div class="value">${value}</div>${delta != null ? `<div class="delta ${deltaCls}">${delta}</div>` : ''}</div>`;
+}
+
+// ---------- Sectores ----------
+// Sector según Yahoo (en inglés) → nombre en castellano. Los ETF no traen sector: van como "ETF / índice".
+const SECTOR_ES = {
+  'Technology': 'Tecnología', 'Communication Services': 'Comunicaciones', 'Consumer Cyclical': 'Consumo discrecional',
+  'Financial Services': 'Financiero', 'Healthcare': 'Salud', 'Consumer Defensive': 'Consumo básico', 'Energy': 'Energía',
+  'Industrials': 'Industrial', 'Basic Materials': 'Materiales', 'Utilities': 'Servicios públicos', 'Real Estate': 'Inmobiliario',
+};
+// Empresas que Yahoo pone en tecnología o finanzas pero que en la práctica se mueven con Bitcoin
+const CRYPTO_LINKED = new Set(['MSTR', 'COIN', 'HUT', 'IREN', 'MARA', 'RIOT', 'CLSK', 'CIFR', 'BITF', 'HIVE', 'WULF', 'CORZ', 'BTDR', 'GLXY', 'IBIT', 'FBTC', 'BITO', 'ETHA']);
+function sectorOf(ticker, info) {
+  if (CRYPTO_LINKED.has(ticker)) return 'Bitcoin / cripto';
+  if (!info || info.error) return info ? 'Sin dato' : null; // null: todavía cargando
+  if (info.sector) return SECTOR_ES[info.sector] || info.sector;
+  return info.kind === 'ETF' ? 'ETF / índice' : 'Sin dato';
+}
+// Agrupa las posiciones por sector: [{ sector, value, tickers: [{ ticker, value }] }], de mayor a menor
+function sectorGroups(positions, infoOf, val) {
+  const g = new Map();
+  for (const x of positions) {
+    const s = sectorOf(x.ticker, infoOf(x.ticker)) ?? 'Cargando…', v = val(x);
+    const e = g.get(s) || { sector: s, value: 0, tickers: [] };
+    e.value += v; e.tickers.push({ ticker: x.ticker, value: v }); g.set(s, e);
+  }
+  const out = [...g.values()].sort((a, b) => b.value - a.value);
+  for (const e of out) e.tickers.sort((a, b) => b.value - a.value);
+  return out;
 }
 
 function donut(items, total, opts = {}) {

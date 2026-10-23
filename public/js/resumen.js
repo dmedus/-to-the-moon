@@ -200,8 +200,11 @@ function viewSummary() {
 
 // Torta de distribución de una cartera. Hasta 8 porciones con color (paleta validada);
 // si hay más posiciones, las 7 mayores y el resto agrupado en "Otros".
+// En acciones y CEDEARs también se puede ver por sector (a valor actual).
 function allocationCard(p, c) {
-  const mode = state.allocMode[p.id] || 'value';
+  const bySector = p.type === 'stock' || p.type === 'cedear';
+  const mode = state.allocMode[p.id] === 'sector' && !bySector ? 'value' : state.allocMode[p.id] || 'value';
+  if (mode === 'sector') return sectorCard(p, c, bySector);
   const val = (x) => (mode === 'value' ? x.value ?? x.cost : x.cost);
   const total = c.positions.reduce((a, x) => a + val(x), 0);
   const sorted = [...c.positions].sort((a, b) => val(b) - val(a));
@@ -222,15 +225,49 @@ function allocationCard(p, c) {
     });
   }
   const res = mode === 'value' ? c.unrealized : null;
-  const seg = (m, label) => `<button type="button" class="${mode === m ? 'on' : ''}" data-action="alloc-mode" data-pid="${p.id}" data-mode="${m}">${label}</button>`;
   return `<div class="card section">
-    <div class="card-head"><h2>¿En qué tengo invertido?</h2><div class="seg sm">${seg('value', 'Valor actual')}${seg('cost', 'Invertido')}</div></div>
+    <div class="card-head"><h2>¿En qué tengo invertido?</h2>${allocSeg(p, mode, bySector)}</div>
     ${donut(items, total, {
       size: 240, stroke: 34, big: true, legendUsd: true, aria: 'Distribución de ' + p.name,
       centerLabel: mode === 'value' ? 'Valor actual' : 'Invertido',
       centerSub: res != null && c.cost ? `${signed(res)} (${pct(res / c.cost)})` : '',
       centerSubColor: res > 0 ? 'var(--pos)' : res < 0 ? 'var(--neg)' : undefined,
     })}
+  </div>`;
+}
+function allocSeg(p, mode, bySector) {
+  const seg = (m, label) => `<button type="button" class="${mode === m ? 'on' : ''}" data-action="alloc-mode" data-pid="${p.id}" data-mode="${m}">${label}</button>`;
+  return `<div class="seg sm">${seg('value', 'Valor actual')}${seg('cost', 'Invertido')}${bySector ? seg('sector', 'Sector') : ''}</div>`;
+}
+// La misma torta agrupada por sector (Yahoo). Hasta 8 sectores con color; si hay más, el resto en "Otros".
+function sectorCard(p, c, bySector) {
+  const val = (x) => x.value ?? x.cost;
+  const total = c.positions.reduce((a, x) => a + val(x), 0);
+  const groups = sectorGroups(c.positions, (t) => tgtInfo[t], val);
+  const top = groups.length > 8 ? groups.slice(0, 7) : groups, rest = groups.slice(top.length);
+  const share = (v) => pct(v / total).replace('+', '');
+  const list = (ts) => ts.map((t) => `${esc(t.ticker)} ${share(t.value)}`).join('<br>');
+  const items = top.map((g, i) => ({
+    label: g.sector, value: g.value, color: `var(--series-${i + 1})`,
+    tip: `<b>${esc(g.sector)}</b> · ${usd(g.value)} · ${share(g.value)}<br>${list(g.tickers)}`,
+    sub: `<span>${esc(g.tickers.map((t) => t.ticker).join(', '))}</span>`,
+  }));
+  if (rest.length) {
+    const rv = rest.reduce((a, g) => a + g.value, 0), ts = rest.flatMap((g) => g.tickers);
+    items.push({ label: `Otros (${rest.length})`, value: rv, color: 'var(--series-other)',
+      tip: `<b>Otros</b> · ${usd(rv)} · ${share(rv)}<br>${rest.map((g) => `${esc(g.sector)} ${share(g.value)}`).join('<br>')}`,
+      sub: `<span>${esc(ts.map((t) => t.ticker).join(', '))}</span>` });
+  }
+  const res = c.unrealized;
+  return `<div class="card section">
+    <div class="card-head"><h2>¿En qué tengo invertido?</h2>${allocSeg(p, 'sector', bySector)}</div>
+    ${donut(items, total, {
+      size: 240, stroke: 34, big: true, legendUsd: true, aria: 'Distribución por sector de ' + p.name,
+      centerLabel: 'Valor actual',
+      centerSub: c.cost ? `${signed(res)} (${pct(res / c.cost)})` : '',
+      centerSubColor: res > 0 ? 'var(--pos)' : res < 0 ? 'var(--neg)' : undefined,
+    })}
+    <div class="muted small" style="margin-top:8px">Sector según Yahoo. MSTR, mineras y ETF de Bitcoin van aparte como “Bitcoin / cripto”, porque se mueven con el precio de Bitcoin.</div>
   </div>`;
 }
 

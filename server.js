@@ -314,12 +314,13 @@ async function analystTarget(ticker) {
   return cached('tgt:' + ticker, 12 * 3600e3, async () => {
     for (let i = 0; i < 2; i++) {
       const a = await yahooAuth(i > 0);
-      const r = await fetch(`https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=financialData&crumb=${encodeURIComponent(a.crumb)}`, { headers: { ...UA, cookie: a.cookie } });
+      const r = await fetch(`https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=financialData,assetProfile,quoteType&crumb=${encodeURIComponent(a.crumb)}`, { headers: { ...UA, cookie: a.cookie } });
       if (r.status === 401 || r.status === 403) continue; // crumb vencido: se pide otro
       if (!r.ok) throw new Error('HTTP ' + r.status);
-      const f = (await r.json()).quoteSummary?.result?.[0]?.financialData || {};
+      const q = (await r.json()).quoteSummary?.result?.[0] || {}, f = q.financialData || {};
       const v = (k) => f[k]?.raw ?? null;
-      return { price: v('currentPrice'), mean: v('targetMeanPrice'), median: v('targetMedianPrice'), high: v('targetHighPrice'), low: v('targetLowPrice'), analysts: v('numberOfAnalystOpinions'), rec: f.recommendationKey && f.recommendationKey !== 'none' ? f.recommendationKey : null };
+      return { price: v('currentPrice'), mean: v('targetMeanPrice'), median: v('targetMedianPrice'), high: v('targetHighPrice'), low: v('targetLowPrice'), analysts: v('numberOfAnalystOpinions'), rec: f.recommendationKey && f.recommendationKey !== 'none' ? f.recommendationKey : null,
+        sector: q.assetProfile?.sector || null, industry: q.assetProfile?.industry || null, kind: q.quoteType?.quoteType || null };
     }
     throw new Error('Yahoo no dio acceso');
   });
