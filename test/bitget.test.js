@@ -1,7 +1,7 @@
 // Bitget: posiciones abiertas y cerradas (bitget.js)
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { _test: { mapOpen, mapClosed } } = require('../bitget');
+const { _test: { mapOpen, mapClosed, mapPartials } } = require('../bitget');
 
 const close = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} ≠ ${b}`);
 
@@ -31,4 +31,25 @@ test('cerrada: usa el resultado neto y el margen con el apalancamiento dado', ()
   assert.equal(c.margin, 300);
   assert.equal(c.fees, -4);
   assert.equal(c.funding, -1);
+});
+
+test('cierre parcial: agrupa las ejecuciones por orden y resta la comisión (coin-M)', () => {
+  const open = [{ symbol: 'SOLUSD_CM', side: 'LONG', market: 'COIN-M', open: 1000, entryPrice: 109, leverage: 10 }];
+  const fills = [
+    { orderId: 'a', symbol: 'SOLUSD_CM', tradeSide: 'close_long', posSide: 'long', execPrice: '100', execQty: '600', execPnl: '-0.5', feeDetail: [{ fee: '0.003' }], createdTime: '5000' },
+    { orderId: 'a', symbol: 'SOLUSD_CM', tradeSide: 'close_long', posSide: 'long', execPrice: '102', execQty: '400', execPnl: '-0.2', feeDetail: [{ fee: '0.002' }], createdTime: '5001' },
+    { orderId: 'b', symbol: 'SOLUSD_CM', tradeSide: 'open_long', posSide: 'long', execPrice: '101', execQty: '52', execPnl: '0', createdTime: '4000' },
+    { orderId: 'c', symbol: 'SOLUSD_CM', tradeSide: 'close_long', posSide: 'long', execPrice: '90', execQty: '10', execPnl: '-1', createdTime: '500' }, // de antes de abrir la actual
+  ];
+  const [p, ...rest] = mapPartials(fills, open);
+  assert.equal(rest.length, 0);
+  assert.equal(p.externalId, 'bitget-parcial-a');
+  assert.equal(p.partial, true);
+  assert.equal(p.qty, 1000);
+  close(p.exitPrice, 100.8);
+  close(p.pnlBase, -0.705);
+  close(p.pnl, (-0.5 - 0.003) * 100 + (-0.2 - 0.002) * 102);
+  close(p.fees, -(0.003 * 100 + 0.002 * 102));
+  assert.equal(p.margin, 100);
+  assert.equal(p.close, 5001);
 });

@@ -562,7 +562,7 @@ function viewFutures(p) {
         ${th(C, 'entries', 'Entradas')}${th(C, 'entryPrice', 'Precio entrada')}${th(C, 'exitPrice', 'Precio salida')}${th(C, 'notional', 'Tamaño máx.')}${th(C, 'margin', 'Margen')}
         ${th(C, 'fees', 'Comisiones')}${th(C, 'funding', 'Funding')}${th(C, 'pnl', 'Resultado')}${th(C, 'pct', '% s/margen')}${th(C, 'hours', 'Duración')}</tr></thead>
       <tbody>${closed.length ? closed.map((x) => `<tr>
-        <td>${dt(x.close)}</td><td class="ticker">${esc(x.symbol)}</td><td>${esc(x.market)}</td><td>${side(x.side)}</td>
+        <td>${dt(x.close)}</td><td class="ticker">${esc(x.symbol)}${x.partial ? ' <span class="tag" title="Cierre parcial: la posición sigue abierta. Cuando se cierre entera, este renglón se reemplaza por la posición completa">parcial</span>' : ''}</td><td>${esc(x.market)}</td><td>${side(x.side)}</td>
         <td class="num">${x.leverage ? num(+x.leverage) + 'x' : '—'}</td><td class="num">${x.entries ?? '—'}</td>
         <td class="num">${price(+x.entryPrice || null)}</td><td class="num">${price(+x.exitPrice || null)}</td><td class="num">${usd(+x.notional)}</td><td class="num">${usd(+x.margin)}</td>
         <td class="num ${cls(+x.fees)}">${x.fees != null ? signed(+x.fees) : '—'}</td>

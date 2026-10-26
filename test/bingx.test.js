@@ -173,3 +173,14 @@ test('Bitget con la PC apagada: el último indica cuántos cobros junta', () => 
   close(db.futures[0].fundingLast, -3);
   assert.equal(db.futures[0].fundingLastCount, 3);
 });
+
+test('mergeSnapshot: el cierre parcial se borra cuando llega la posición entera', () => {
+  const { mergeSnapshot } = require('../bingx');
+  const base = { portfolios: [], futures: [], futuresAccounts: {} };
+  const partial = { externalId: 'bitget-parcial-a', partial: true, symbol: 'SOLUSD_CM', side: 'LONG', status: 'closed', open: 1000, close: 5000, pnl: -70 };
+  let db = mergeSnapshot(base, { exchange: 'Bitget', fetched: new Date(6000).toISOString(), accounts: [], open: [], closed: [partial] }, 'futuros-bitget');
+  assert.equal(db.futures.length, 1);
+  const whole = { externalId: 'bitget-77', symbol: 'SOLUSD_CM', side: 'LONG', status: 'closed', open: 1000, close: 9000, pnl: -100 };
+  db = mergeSnapshot(db, { exchange: 'Bitget', fetched: new Date(10000).toISOString(), accounts: [], open: [], closed: [whole] }, 'futuros-bitget');
+  assert.deepEqual(db.futures.map((f) => f.externalId), ['bitget-77']);
+});

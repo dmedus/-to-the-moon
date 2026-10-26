@@ -264,6 +264,10 @@ function mergeSnapshot(db, snap, pid = PORTFOLIO_ID) {
     Object.assign(rec, t, { updated: snap.fetched });
     if (!byExt.has(t.externalId)) { kept.push(rec); byExt.set(t.externalId, rec); }
   }
+  // Un cierre parcial (Bitget) queda guardado hasta que llega la posición entera: esa ya lo incluye en su resultado
+  const full = kept.filter((f) => f.portfolioId === pid && f.status === 'closed' && !f.partial);
+  const covered = (p) => full.some((f) => f.symbol === p.symbol && f.side === p.side && p.close >= (f.open ?? 0) - 60e3 && p.close <= (f.close ?? 0) + 60e3);
+  for (let i = kept.length - 1; i >= 0; i--) if (kept[i].portfolioId === pid && kept[i].partial && covered(kept[i])) kept.splice(i, 1);
   for (const t of snap.open) if ('_orders' in t) coinmFunding(t, prevOpen.get(t.externalId), snap.fetched);
   // Si el exchange da solo el funding acumulado (Bitget), el último cobro sale de cuánto cambió desde la sincronización anterior.
   // Se compara en la moneda del margen (en coin-M el total en USD cambia con el precio) y solo si pasó una hora de funding.

@@ -53,6 +53,47 @@ async function closedPositions(request, category, start, end) {
 
 // USDT-M: tamaño en unidades del activo, margen y resultado en USDT.
 // Coin-M (ej. SOLUSD_CM): tamaño en USD, margen y resultado en la moneda (SOL); se pasan a USD con el precio.
+// Cierres parciales de una posición que sigue abierta: Bitget recién los incluye en history-position cuando se cierra entera.
+// Se arman con las ejecuciones (fills) de cierre, agrupadas por orden. execPnl es el resultado bruto; se le resta la comisión.
+async function fillsSince(request, category, start, end) {
+  const out = [];
+  for (let from = start; from < end; from += 7 * DAY) { // de a 7 días, como piden las consultas de ejecuciones
+    let cursor;
+    for (let page = 0; page < 10; page++) {
+      const d = await request('/api/v3/trade/fills', { category, startTime: from, endTime: Math.min(from + 7 * DAY, end), limit: 100, cursor });
+      const list = d?.list ?? [];
+      out.push(...list);
+      if (list.length < 100 || !d.cursor) break;
+      cursor = d.cursor;
+    }
+  }
+  return out;
+}
+function mapPartials(fills, open) {
+  const byOrder = new Map();
+  for (const f of fills) {
+    if (!/^close/.test(f.tradeSide)) continue;
+    const pos = open.find((o) => o.symbol === f.symbol && o.side === side(f.posSide) && n(f.createdTime) >= (o.open ?? 0));
+    if (!pos) continue; // de una posición ya cerrada: esa la trae entera history-position
+    const g = byOrder.get(f.orderId) || { pos, qty: 0, value: 0, pnl: 0, fee: 0, time: 0 };
+    const q = n(f.execQty) ?? 0, px = n(f.execPrice) ?? 0, fee = (f.feeDetail || []).reduce((a, x) => a + (n(x.fee) ?? 0), 0);
+    const usd = (v) => (pos.market === 'COIN-M' ? v * px : v);
+    g.qty += q; g.value += q * px; g.pnl += usd((n(f.execPnl) ?? 0) - fee); g.fee -= usd(fee); g.pnlBase = (g.pnlBase ?? 0) + (n(f.execPnl) ?? 0) - fee;
+    g.time = Math.max(g.time, n(f.createdTime) ?? 0);
+    byOrder.set(f.orderId, g);
+  }
+  return [...byOrder].map(([orderId, g]) => {
+    const { pos } = g, coinM = pos.market === 'COIN-M';
+    const notional = coinM ? g.qty : g.qty * pos.entryPrice;
+    return {
+      externalId: 'bitget-parcial-' + orderId, partial: true, market: pos.market, symbol: pos.symbol, side: pos.side, leverage: pos.leverage,
+      status: 'closed', open: pos.open, close: g.time, entries: null, qty: g.qty, entryPrice: pos.entryPrice, exitPrice: g.qty ? g.value / g.qty : null,
+      notional, margin: pos.leverage ? notional / pos.leverage : null, pnl: g.pnl, fees: g.fee, funding: null, // el funding queda en la posición abierta
+      ...(coinM ? { pnlBase: g.pnlBase } : {}),
+    };
+  });
+}
+
 function mapOpen(p, coinM) {
   const total = n(p.total), mark = n(p.markPrice), toUsd = (v) => (v == null ? null : coinM ? v * mark : v);
   return {
@@ -103,6 +144,14 @@ async function fetchSnapshot(keys, days = 89) {
     ...usdtHist.map((h) => mapClosed(h, false, levOf(h))),
     ...coinHist.map((h) => mapClosed(h, true, levOf(h))),
   ];
+  // Cierres parciales de las abiertas (hasta 30 días atrás; los ya guardados quedan en la base)
+  for (const [category, market] of [['USDT-FUTURES', 'USDT-M'], ['COIN-FUTURES', 'COIN-M']]) {
+    const mine = open.filter((o) => o.market === market);
+    if (!mine.length) continue;
+    const from = Math.max(end - 30 * DAY, Math.min(...mine.map((o) => o.open ?? 0)));
+    try { closed.push(...mapPartials(await fillsSince(request, category, from, end), mine)); }
+    catch (e) { console.warn(`Bitget: no se pudieron leer los cierres parciales (${category}): ${e.message}`); }
+  }
 
   // La Cuenta Unificada mezcla spot y futuros. Se cuenta solo lo de futuros:
   // USDT libre + margen USDT-M, y en coin-M solo el margen + PnL de las posiciones abiertas
@@ -125,4 +174,4 @@ async function fetchSnapshot(keys, days = 89) {
   return { exchange: 'Bitget', fetched: new Date().toISOString(), accounts, open, closed };
 }
 
-module.exports = { fetchSnapshot, PORTFOLIO_ID, _test: { mapOpen, mapClosed } }; // _test: para test/
+module.exports = { fetchSnapshot, PORTFOLIO_ID, _test: { mapOpen, mapClosed, mapPartials, client } }; // _test: para test/
