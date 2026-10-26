@@ -79,7 +79,7 @@ function txForm(tx = {}) {
 
   const body = `
     ${field('Cartera', portfolioSelect(pid))}
-    ${field('Tipo', `<div class="seg"><button type="button" data-side="buy" class="${t.side === 'buy' ? 'on' : ''}">Compra</button><button type="button" data-side="sell" class="${t.side === 'sell' ? 'on' : ''}">Venta</button></div><input type="hidden" name="side" value="${t.side}">`)}
+    ${field('Tipo', `<div class="seg"><button type="button" data-side="buy" class="${t.side === 'buy' ? 'on' : ''}">Compra</button><button type="button" data-side="sell" class="${t.side === 'sell' ? 'on' : ''}">Venta</button><button type="button" data-side="del">Borrar</button></div><input type="hidden" name="side" value="${t.side}">`)}
     ${field('Ticker', `<input name="ticker" list="tickers" required value="${esc(t.ticker || '')}" autocomplete="off" style="text-transform:uppercase">`, { hint: '<span id="ticker-hint">Para CEDEARs usá el ticker de NY (ej. DIS, no DISN)</span>' })}
     ${field('Fecha', `<input name="date" type="date" required value="${t.date}">`)}
     ${field('<span id="qty-label">Cantidad</span>', `<input name="qty" type="number" step="any" min="0" required value="${t.qty}">`, { hint: '<span id="qty-hint"></span>' })}
@@ -93,9 +93,17 @@ function txForm(tx = {}) {
     ${field('Nota', `<input name="note" value="${esc(t.note || '')}">`, { full: true })}
     <div class="preview" id="tx-preview"></div>
     <div class="warn" id="tx-warn"></div>
+    <div class="field full" id="tx-del" style="display:none"></div>
     <datalist id="tickers">${Object.keys(state.ratios).map((k) => `<option value="${k}">`).join('')}</datalist>`;
 
   openModal(editing ? 'Editar operación' : 'Nueva operación', body, (d) => {
+    if (d.side === 'del') { // "Borrar": se elige una operación ya cargada de la lista
+      const del = state.db.transactions.find((x) => x.id === d.delId);
+      if (!del) { $('#tx-warn').textContent = 'Elegí qué operación borrar.'; return false; }
+      if (!confirm(`¿Borrar ${del.side === 'buy' ? 'la compra' : 'la venta'} de ${num(+del.qty, 8)} ${del.ticker} del ${fmtDate(del.date)}?`)) return false;
+      state.db.transactions = state.db.transactions.filter((x) => x.id !== del.id);
+      save(); toast('Operación borrada'); return;
+    }
     const p = portfolio(d.portfolioId);
     const rec = {
       id: tx.id || uid(), portfolioId: d.portfolioId, side: d.side,
@@ -119,6 +127,30 @@ function txForm(tx = {}) {
     const d = Object.fromEntries(new FormData(form));
     const p = portfolio(d.portfolioId);
     const tk = d.ticker.trim().toUpperCase();
+    // Modo "Borrar": se esconden los datos de la operación y se muestran las ya cargadas de esa cartera (filtradas por ticker)
+    const del = d.side === 'del', extra = [...form.querySelectorAll('.modal-body > .field')].slice(3).filter((f) => f.id !== 'tx-del');
+    for (const k of ['ticker', 'date', 'qty', 'price']) form[k].required = !del;
+    form.querySelector('[type=submit]').textContent = del ? 'Borrar' : 'Guardar';
+    form.querySelector('[type=submit]').classList.toggle('danger', del);
+    $('#tx-del').style.display = del ? '' : 'none';
+    $('#tx-preview').style.display = del ? 'none' : '';
+    if (del) {
+      extra.forEach((f) => (f.style.display = 'none'));
+      $('#tx-warn').textContent = '';
+      if (form.dataset.delKey === p.id + '|' + tk) return; // marcar una opción no rearma la lista (no salta el scroll)
+      form.dataset.delKey = p.id + '|' + tk;
+      const list = state.db.transactions.filter((x) => x.portfolioId === p.id && !x.externalId && (!tk || x.ticker.startsWith(tk)))
+        .sort((a, b) => b.date.localeCompare(a.date)).slice(0, 50);
+      const sel = d.delId || (editing ? tx.id : '');
+      $('#tx-del').innerHTML = `<label>¿Cuál borrar? <span class="muted">(${list.length === 50 ? 'las 50 más recientes' : list.length}${tk ? ' de ' + esc(tk) : ''})</span></label>
+        <div class="del-list">${list.length ? list.map((x) => `<label class="del-item"><input type="radio" name="delId" value="${x.id}" ${x.id === sel ? 'checked' : ''}>
+          <span>${fmtDate(x.date)} · <span class="tag ${x.side}">${x.side === 'buy' ? 'Compra' : 'Venta'}</span> <b>${num(+x.qty, 8)} ${esc(x.ticker)}</b> a ${x.currency === 'ARS' ? ars(+x.price) : price(+x.price)}${x.note ? ` <span class="muted small">${esc(x.note)}</span>` : ''}</span></label>`).join('')
+          : '<div class="empty">No hay operaciones cargadas a mano en esta cartera' + (tk ? ' para ' + esc(tk) : '') + '.</div>'}</div>
+        <span class="hint">Escribí el ticker arriba para achicar la lista.</span>`;
+      return;
+    }
+    delete form.dataset.delKey;
+    extra.forEach((f) => (f.style.display = ''));
     const isCed = p.type === 'cedear', isBond = p.type === 'bonds';
     $('#f-ratio').style.display = isCed ? '' : 'none';
     $('#f-fx').style.display = d.currency === 'ARS' ? '' : 'none';
