@@ -33,12 +33,13 @@ function client(keys) {
   };
 }
 
-// Precio de marca y funding vigente de un par (público)
+// Precio de marca y funding vigente de un par (público). Bitunix da la tasa en porcentaje (0.045146 = 0,045%; el tope es ±2%):
+// se pasa a fracción como en los otros exchanges.
 async function market(symbol) {
   const res = await fetch(`${BASE_URL}/api/v1/futures/market/funding_rate?symbol=${encodeURIComponent(symbol)}`, { signal: AbortSignal.timeout(10000) }).catch(() => null);
   const r = (await res?.json().catch(() => null))?.data;
   const d = Array.isArray(r) ? r[0] : r;
-  return d ? { markPrice: n(d.markPrice), fundingRate: n(d.fundingRate), fundingNextTime: n(d.nextFundingTime), fundingHours: n(d.fundingInterval) || 8 } : {};
+  return d ? { markPrice: n(d.markPrice), fundingRate: n(d.fundingRate) == null ? null : n(d.fundingRate) / 100, fundingNextTime: n(d.nextFundingTime), fundingHours: n(d.fundingInterval) || 8 } : {};
 }
 
 // Posiciones cerradas: Bitunix las devuelve agrupadas. Aunque la documentación dice lo contrario, realizedPNL ya
