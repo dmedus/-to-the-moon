@@ -168,6 +168,8 @@ const EXCHANGE_INFO = {
     help: 'En Bitget: Perfil → Gestión de API → Crear API, con permiso <b>solo lectura</b>. Bitget te pide inventar una <b>passphrase</b>: es la que va acá.' },
   binance: { what: 'tu spot (con Funding y Earn) y tus futuros USDT-M y coin-M', fields: [['key', 'API key'], ['secret', 'Secret key']],
     help: 'En Binance: Perfil → Gestión de API → Crear API → <b>generada por el sistema</b> (HMAC), dejando tildado solo <b>Habilitar lectura</b> (sin trading ni retiros).' },
+  bitunix: { what: 'tus futuros USDT-M', fields: [['key', 'API key'], ['secret', 'Secret key']],
+    help: 'En Bitunix: Perfil → Gestión de API → Crear API, dejando tildado solo el permiso de <b>lectura</b> (sin trading ni retiros).' },
   bingx: { what: 'tus futuros USDT-M y coin-M', fields: [['key', 'API key'], ['secret', 'Secret key']],
     help: 'En BingX: Perfil → Gestión de API → Crear API, con permiso <b>solo lectura</b> (sin trading ni retiros).' },
   pionex: { what: 'tus bots', fields: [['key', 'API key'], ['secret', 'Secret']],
@@ -277,7 +279,7 @@ function viewSettings() {
       <button class="btn" type="submit">Agregar</button>
     </form>
   </div>
-  ${['binance', 'bitget', 'bingx', 'pionex'].map(exchangeCard).join('')}
+  ${['binance', 'bitget', 'bitunix', 'bingx', 'pionex'].map(exchangeCard).join('')}
   <div class="card section">
     <h2>Datos</h2>
     <p class="muted small" style="margin-top:0">${isAdmin()

@@ -39,6 +39,7 @@ document.addEventListener('click', (e) => {
     case 'sync-bingx': return syncNow('bingx');
     case 'sync-bitget': return syncNow('bitget');
     case 'sync-binance': return syncNow('binance');
+    case 'sync-bitunix': return syncNow('bitunix');
     case 'check-pionex':
     case 'check-bingx':
     case 'check-bitget': {

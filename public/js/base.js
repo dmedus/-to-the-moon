@@ -11,6 +11,7 @@ const state = {
   bingx: { configured: false, error: null, syncing: false },
   bitget: { configured: false, error: null, syncing: false },
   binance: { configured: false, error: null, syncing: false },
+  bitunix: { configured: false, error: null, syncing: false },
   role: null, // 'owner' (ve y edita todo) o 'guest' (solo lectura, sin montos)
   hide: false, // ocultar montos en dólares y pesos
   sort: {},
@@ -111,7 +112,7 @@ function computeBots(p) {
 
 // Carteras de futuros: el valor es el equity de las cuentas; las posiciones valen margen + PnL.
 // Comisión taker de cada exchange: se usa para estimar el costo de cerrar a mercado.
-const TAKER_FEE = { BingX: 0.0005, Bitget: 0.0006, Binance: 0.0005 };
+const TAKER_FEE = { BingX: 0.0005, Bitget: 0.0006, Binance: 0.0005, Bitunix: 0.0006 };
 
 // ROE: resultado sobre el margen inicial de la posición (tamaño ÷ apalancamiento), como lo muestra el exchange.
 // En coin-M el tamaño ya está en USD; en USDT-M se usa el tamaño a precio de entrada.
@@ -240,9 +241,9 @@ function compute(p) {
 const computeAll = () => state.db.portfolios.map(compute);
 
 // ================= Sincronización de exchanges =================
-// El servidor sincroniza Pionex, BingX, Bitget y Binance solo cada 3 minutos; la app recarga los datos y el estado.
-const EXCHANGE_NAMES = { pionex: 'Pionex', bingx: 'BingX', bitget: 'Bitget', binance: 'Binance' };
-const FUTURES_EXCHANGE = { 'futuros-bingx': 'bingx', 'futuros-bitget': 'bitget', 'futuros-binance': 'binance' }; // cartera sincronizada → exchange
+// El servidor sincroniza Pionex, BingX, Bitget, Binance y Bitunix solo cada 3 minutos; la app recarga los datos y el estado.
+const EXCHANGE_NAMES = { pionex: 'Pionex', bingx: 'BingX', bitget: 'Bitget', binance: 'Binance', bitunix: 'Bitunix' };
+const FUTURES_EXCHANGE = { 'futuros-bingx': 'bingx', 'futuros-bitget': 'bitget', 'futuros-binance': 'binance', 'futuros-bitunix': 'bitunix' }; // cartera sincronizada → exchange
 async function loadSyncStatus() {
   try {
     const s = await api('/api/sync/status');

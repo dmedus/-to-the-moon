@@ -357,11 +357,12 @@ const isoDay = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d || '');
 
 // ---------- Claves de exchanges (solo lectura) ----------
 // Cada usuario carga sus claves desde Ajustes: quedan cifradas en su carpeta (keystore.js).
-// El dueño además puede seguir usando los archivos data/pionex.env, data/bingx.env, data/bitget.env y data/binance.env.
+// El dueño además puede seguir usando los archivos data/pionex.env, data/bingx.env, data/bitget.env, data/binance.env y data/bitunix.env.
 const keystore = require('./keystore');
 const bingx = require('./bingx');
 const bitget = require('./bitget');
 const binance = require('./binance');
+const bitunix = require('./bitunix');
 const { pionexClosed } = require('./pionex');
 const BOTS_PORTFOLIO_ID = 'bots-pionex';
 
@@ -381,6 +382,7 @@ const EXCHANGES = {
   bingx: { env: 'bingx.env', fields: [['key', 'BINGX_API_KEY'], ['secret', 'BINGX_SECRET_KEY']] },
   bitget: { env: 'bitget.env', fields: [['key', 'BITGET_API_KEY'], ['secret', 'BITGET_SECRET_KEY'], ['passphrase', 'BITGET_PASSPHRASE']] },
   binance: { env: 'binance.env', fields: [['key', 'BINANCE_API_KEY'], ['secret', 'BINANCE_SECRET_KEY']] },
+  bitunix: { env: 'bitunix.env', fields: [['key', 'BITUNIX_API_KEY'], ['secret', 'BITUNIX_SECRET_KEY']] },
 };
 function envKeys(ex) {
   const env = readEnv(path.join(DATA_DIR, EXCHANGES[ex].env));
@@ -404,6 +406,11 @@ async function syncBingx(uid, keys) {
 async function syncBitget(uid, keys) {
   const snap = await bitget.fetchSnapshot(keys);
   writeDb(bingx.mergeSnapshot(readDb(uid), snap, bitget.PORTFOLIO_ID), uid);
+  return { updated: snap.fetched };
+}
+async function syncBitunix(uid, keys) {
+  const snap = await bitunix.fetchSnapshot(keys);
+  writeDb(bingx.mergeSnapshot(readDb(uid), snap, bitunix.PORTFOLIO_ID), uid);
   return { updated: snap.fetched };
 }
 // Binance: futuros y spot con la misma clave. Cada parte es opcional (hay quien tiene solo spot):
@@ -534,7 +541,7 @@ async function syncPionex(uid, keys) {
 
 // ---------- Sincronización automática (servidor) ----------
 // El servidor sincroniza los exchanges de todos los usuarios solo, así los datos están al día aunque nadie tenga la app abierta.
-const SYNCS = { pionex: syncPionex, bingx: syncBingx, bitget: syncBitget, binance: syncBinance };
+const SYNCS = { pionex: syncPionex, bingx: syncBingx, bitget: syncBitget, binance: syncBinance, bitunix: syncBitunix };
 const syncStates = new Map(); // uid -> { pionex: { error, updated, last }, ... }
 function syncStateFor(uid) {
   if (!syncStates.has(uid)) syncStates.set(uid, Object.fromEntries(Object.keys(SYNCS).map((ex) => [ex, { error: null, updated: null, last: 0 }])));
@@ -970,13 +977,13 @@ const server = http.createServer(async (req, res) => {
     }
 
     // Sincronización pedida a mano: /api/<exchange>/sync
-    const syncM = p.match(/^\/api\/(pionex|bingx|bitget|binance)\/sync$/);
+    const syncM = p.match(/^\/api\/(pionex|bingx|bitget|binance|bitunix)\/sync$/);
     if (syncM && req.method === 'POST') {
       try { const r = await runSync(uid, syncM[1], { force: true }); return send(res, 200, { configured: r.configured, updated: r.updated }); }
       catch (e) { return send(res, 502, { error: e.message }); }
     }
     // Claves desde Ajustes: /api/keys/<exchange> guarda (si funcionan) y /api/keys/<exchange>/delete las borra
-    const keysM = p.match(/^\/api\/keys\/(pionex|bingx|bitget|binance)(\/delete)?$/);
+    const keysM = p.match(/^\/api\/keys\/(pionex|bingx|bitget|binance|bitunix)(\/delete)?$/);
     if (keysM && req.method === 'POST') {
       const ex = keysM[1];
       if (keysM[2]) {
