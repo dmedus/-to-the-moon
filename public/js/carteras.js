@@ -553,7 +553,7 @@ function viewFutures(p) {
       }).join('') || '<tr><td colspan="6" class="empty">Sin datos todavía.</td></tr>'}</tbody>
     </table></div>
   </div>
-  ${ex === 'bitget' ? dobleSaylorCard(p, c) : balasCard(p, c)}
+  ${ex === 'bitget' ? dobleSaylorCard(p, c) : ex === 'bitunix' ? '' : balasCard(p, c)}
   <div class="card section">
     <h2>Operaciones cerradas <span class="muted small">(resultado neto de comisiones y funding)</span></h2>
     ${c.costs.fundingUnknown ? `<p class="small muted" style="margin-top:0">* ${c.costs.fundingUnknown === 1 ? 'Una operación no tiene' : c.costs.fundingUnknown + ' operaciones no tienen'} el funding informado (BingX no lo da en coin-M): su resultado ya lo incluye, pero no se puede separar.</p>` : ''}
