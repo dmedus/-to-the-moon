@@ -5,15 +5,19 @@
 const dayKey = (ms) => new Date(ms).toLocaleDateString('sv-SE'); // AAAA-MM-DD en la hora local
 const MESES_LARGO = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
+// Una operación que ganó o perdió menos de esto no cuenta ni como ganada ni como perdida (queda "pareja")
+const MIN_TRADE = 1;
+const outcome = (pnl) => (pnl >= MIN_TRADE ? 1 : pnl <= -MIN_TRADE ? -1 : 0);
+
 // Estadísticas de las cerradas: ganadas/perdidas, promedios, racha, por día y por mes
 function tradeStats(closed) {
   const ops = closed.filter((x) => x.close && x.pnl != null).map((x) => ({ ...x, pnl: +x.pnl })).sort((a, b) => a.close - b.close);
-  const won = ops.filter((x) => x.pnl > 0), lost = ops.filter((x) => x.pnl < 0);
+  const won = ops.filter((x) => outcome(x.pnl) > 0), lost = ops.filter((x) => outcome(x.pnl) < 0);
   const sum = (l) => l.reduce((a, x) => a + x.pnl, 0);
   const gW = sum(won), gL = sum(lost);
   let streak = 0; // racha actual: + ganadas seguidas, − perdidas seguidas
   for (let i = ops.length - 1; i >= 0; i--) {
-    const s = Math.sign(ops[i].pnl);
+    const s = outcome(ops[i].pnl);
     if (!s) continue;
     if (streak && Math.sign(streak) !== s) break;
     streak += s;
@@ -22,7 +26,7 @@ function tradeStats(closed) {
     const m = new Map();
     for (const x of ops) {
       const k = keyOf(x.close), g = m.get(k) || { key: k, ops: 0, won: 0, lost: 0, pnl: 0, fees: 0, best: null, worst: null };
-      g.ops++; if (x.pnl > 0) g.won++; else if (x.pnl < 0) g.lost++;
+      g.ops++; if (outcome(x.pnl) > 0) g.won++; else if (outcome(x.pnl) < 0) g.lost++;
       g.pnl += x.pnl; g.fees += +x.fees || 0;
       if (!g.best || x.pnl > g.best.pnl) g.best = x;
       if (!g.worst || x.pnl < g.worst.pnl) g.worst = x;
@@ -57,7 +61,7 @@ function equityChart(s, start, now) {
   const X = (t) => P + ((t - t0) / (t1 - t0 || 1)) * (W - 2 * P), Y = (v) => H - P - ((v - lo) / span) * (H - 2 * P);
   const line = pts.map((p) => `${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join(' ');
   const up = now >= start, color = up ? 'var(--pos)' : 'var(--neg)';
-  const dots = pts.slice(1, -1).map(([t, v, x]) => `<circle cx="${X(t).toFixed(1)}" cy="${Y(v).toFixed(1)}" r="3.5" fill="${x.pnl >= 0 ? 'var(--pos)' : 'var(--neg)'}" class="hit"
+  const dots = pts.slice(1, -1).map(([t, v, x]) => `<circle cx="${X(t).toFixed(1)}" cy="${Y(v).toFixed(1)}" r="3.5" fill="${['var(--neg)', 'var(--text-muted)', 'var(--pos)'][outcome(x.pnl) + 1]}" class="hit"
     data-tip="${esc(`<b>${esc(coinOf(x.symbol))} ${x.side === 'SHORT' ? 'short' : 'long'}</b> · ${new Date(t).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}<br>${signed(x.pnl)} → cuenta ${usd(v)}`)}"/>`).join('');
   return `<svg class="tr-curve" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Curva de la cuenta">
       <line x1="${P}" x2="${W - P}" y1="${Y(start).toFixed(1)}" y2="${Y(start).toFixed(1)}" stroke="var(--text-muted)" stroke-dasharray="4 4" stroke-width="1"/>
@@ -116,6 +120,7 @@ function tradingDashboard(p, c) {
         <div class="tr-wl-n neg"><b>${s.lost}</b><span>perdidas</span></div>
       </div>
       <div class="tr-split"><span class="pos" style="width:${(s.won / decided) * 100}%"></span><span class="neg" style="width:${(s.lost / decided) * 100}%"></span></div>
+      ${s.even ? `<div class="small muted" style="margin-top:6px">+ ${s.even} ${s.even === 1 ? 'pareja' : 'parejas'}: ${s.even === 1 ? 'ganó o perdió' : 'ganaron o perdieron'} menos de US$ ${MIN_TRADE}, no cuentan ni como ganadas ni como perdidas</div>` : ''}
       <div class="tr-facts">
         <div><span class="muted">Ganás en promedio</span><b class="pos">${signed(s.avgWin)}</b></div>
         <div><span class="muted">Perdés en promedio</span><b class="neg">${s.avgLoss != null ? signed(s.avgLoss) : '—'}</b></div>
@@ -125,7 +130,7 @@ function tradingDashboard(p, c) {
         <div><span class="muted">Peor operación</span><span><b class="${cls(s.worst?.pnl)}">${signed(s.worst?.pnl)}</b> <span class="muted small">${op(s.worst)}</span></span></div>
         <div><span class="muted">Comisiones pagadas</span><b class="neg">${signed(s.fees)}</b></div>
         <div><span class="muted">Funding</span><b class="${cls(s.funding)}">${signed(s.funding)}</b></div>
-      </div>` : '<div class="empty">Todavía no hay operaciones cerradas.</div>'}
+      </div>` : `<div class="empty">${s.ops.length ? `Ninguna operación ganó o perdió más de US$ ${MIN_TRADE} todavía.` : 'Todavía no hay operaciones cerradas.'}</div>`}
     </div>
     <div class="card section">
       <h2>Cómo fue la cuenta <span class="muted small">(cada punto es una operación cerrada)</span></h2>
