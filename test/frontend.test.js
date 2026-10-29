@@ -69,3 +69,9 @@ test('sectorGroups: suma por sector y ordena de mayor a menor', () => {
   assert.deepEqual(JSON.parse(JSON.stringify(g.map((x) => [x.sector, x.value]))), [['Tecnología', 130], ['Bitcoin / cripto', 70], ['Financiero', 50]]);
   assert.deepEqual([...g[0].tickers.map((t) => t.ticker)], ['NVDA', 'AVGO']);
 });
+
+test('coinOf: la moneda del par, sea cual sea el exchange o la cuenta', () => {
+  for (const s of ['SOLUSDT', 'SOL-USDT', 'SOLUSD_CM', 'SOL-USD', 'SOLUSD_PERP', 'solusdt']) assert.equal(run('coinOf')(s), 'SOL', s);
+  assert.equal(run('coinOf')('XAUTUSDT'), 'XAUT');
+  assert.equal(run('coinOf')('MSTRUSDT'), 'MSTR');
+});

@@ -112,6 +112,8 @@ function computeBots(p) {
 
 // Carteras de futuros: el valor es el equity de las cuentas; las posiciones valen margen + PnL.
 // Comisión taker de cada exchange: se usa para estimar el costo de cerrar a mercado.
+// Moneda de un par de futuros, sin la cotización ni el sufijo del exchange: SOLUSDT, SOL-USDT, SOLUSD_CM, SOLUSD_PERP → SOL
+const coinOf = (sym) => String(sym).toUpperCase().replace(/[-_](PERP|CM)$/, '').replace(/[-_]?(USDT|USDC|USD)$/, '');
 const TAKER_FEE = { BingX: 0.0005, Bitget: 0.0006, Binance: 0.0005, Bitunix: 0.0006 };
 
 // ROE: resultado sobre el margen inicial de la posición (tamaño ÷ apalancamiento), como lo muestra el exchange.

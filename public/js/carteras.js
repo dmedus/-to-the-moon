@@ -448,18 +448,18 @@ function viewFutures(p) {
   const fundingFrom = Math.min(...c.positions.map((x) => +x.fundingFrom || Infinity)); // coin-M de BingX: se sigue desde esa fecha
   const closedCost = c.costs.fees + c.costs.funding, closedGross = c.realized - closedCost; // resultado antes de comisiones y funding
   const bySym = {};
+  // Una fila por moneda: SOL en USDT-M y en coin-M van juntos, y "Cuenta" dice en cuáles se operó
+  const groupOf = (x) => (bySym[coinOf(x.symbol)] ||= { symbol: coinOf(x.symbol), markets: new Set(), ops: 0, wins: 0, margin: 0, pnl: 0, openMargin: 0, openPnl: 0 });
   for (const x of c.closed) {
-    const k = x.symbol + '|' + x.market;
-    const g = (bySym[k] ||= { symbol: x.symbol, market: x.market, ops: 0, wins: 0, margin: 0, pnl: 0, openMargin: 0, openPnl: 0 });
+    const g = groupOf(x); g.markets.add(x.market);
     g.ops++; if (x.pnl > 0) g.wins++; g.margin += +x.margin || 0; g.pnl += +x.pnl || 0;
   }
   for (const x of c.positions) {
-    const k = x.symbol + '|' + x.market;
-    const g = (bySym[k] ||= { symbol: x.symbol, market: x.market, ops: 0, wins: 0, margin: 0, pnl: 0, openMargin: 0, openPnl: 0 });
+    const g = groupOf(x); g.markets.add(x.market);
     g.openMargin += x.cost; g.openPnl += +x.pnl || 0;
   }
   const S = 'futs-' + p.id;
-  const symRows = myOrderRows(p, S, sortRows(S, Object.values(bySym).map((g) => ({ ...g, pct: g.margin ? g.pnl / g.margin : null, avgMargin: g.ops ? g.margin / g.ops : null })), 'pnl'), (g) => g.symbol + '|' + g.market);
+  const symRows = myOrderRows(p, S, sortRows(S, Object.values(bySym).map((g) => ({ ...g, pct: g.margin ? g.pnl / g.margin : null, avgMargin: g.ops ? g.margin / g.ops : null, market: [...g.markets].sort().reverse().join(', ') })), 'pnl'), (g) => g.symbol);
   const dt = (ms) => (ms ? new Date(ms).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '—');
   const dur = (h) => (h == null ? '—' : h < 48 ? `${Math.round(h)} h` : `${Math.round(h / 24)} d`);
   const side = (s) => `<span class="tag ${s === 'LONG' ? 'buy' : 'sell'}">${s === 'LONG' ? 'Long' : 'Short'}</span>`;
@@ -522,7 +522,7 @@ function viewFutures(p) {
       <thead><tr>${th(S, 'symbol', 'Par', false)}<th>Cuenta</th>${th(S, 'ops', 'Operaciones')}${th(S, 'wins', 'Ganadoras')}
         ${th(S, 'margin', 'Margen puesto')}${th(S, 'avgMargin', 'Margen prom.')}${th(S, 'pnl', 'Resultado')}${th(S, 'pct', '% s/margen')}
         ${th(S, 'openMargin', 'Margen abierto')}${th(S, 'openPnl', 'PnL abierto')}</tr></thead>
-      <tbody data-reorder="${p.id}" data-tid="${S}">${symRows.map((g) => `<tr data-key="${esc(g.symbol + '|' + g.market)}">
+      <tbody data-reorder="${p.id}" data-tid="${S}">${symRows.map((g) => `<tr data-key="${esc(g.symbol)}">
         <td class="ticker">${grip()}${esc(g.symbol)}</td><td>${esc(g.market)}</td><td class="num">${g.ops}</td>
         <td class="num">${g.ops ? `${g.wins} (${Math.round((g.wins / g.ops) * 100)}%)` : '—'}</td>
         <td class="num">${g.ops ? usd(g.margin) : '—'}</td><td class="num">${g.ops ? usd(g.avgMargin) : '—'}</td>
