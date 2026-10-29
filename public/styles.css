@@ -525,3 +525,33 @@ tbody[data-reorder] > tr.dragging td { background: var(--surface-1); }
 .draw-bar .seg button[data-tool="long"], .draw-bar .seg button[data-tool="short"] { font-size: 12px; padding: 5px 12px; }
 .draw-num { width: 96px; padding: 1px 4px; font: inherit; color: inherit; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-1); }
 .draw-num:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+/* Panel de trading diario (Bitunix) */
+.tr-hero { padding: 20px 24px; }
+.tr-flow { display: flex; align-items: center; justify-content: space-around; gap: 16px; flex-wrap: wrap; text-align: center; }
+.tr-flow .label { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .06em; }
+.tr-big { font-size: 34px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -.02em; margin: 2px 0; }
+.tr-arrow { font-size: 26px; color: var(--text-muted); }
+.tr-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 16px; }
+.tr-grid > .section { margin-bottom: 16px; }
+.tr-wl { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin: 6px 0 10px; }
+.tr-wl > div { display: flex; flex-direction: column; align-items: center; }
+.tr-wl b { font-size: 44px; line-height: 1; font-weight: 800; font-variant-numeric: tabular-nums; }
+.tr-wl span { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+.tr-wl-rate b { font-size: 26px; color: var(--text-primary); }
+.tr-split { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--surface-2); gap: 2px; }
+.tr-split .pos { background: var(--pos); } .tr-split .neg { background: var(--neg); }
+.tr-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; margin-top: 16px; font-size: 13px; }
+.tr-facts > div { display: flex; flex-direction: column; gap: 2px; }
+.tr-facts b { font-variant-numeric: tabular-nums; font-size: 15px; }
+.tr-curve { width: 100%; height: 190px; display: block; }
+.tr-days { display: flex; gap: 4px; height: 150px; align-items: stretch; }
+.tr-day { flex: 1 1 0; min-width: 8px; max-width: 34px; display: flex; flex-direction: column; cursor: default; }
+.tr-day-up, .tr-day-down { flex: 1; display: flex; }
+.tr-day-up { align-items: flex-end; border-bottom: 1px solid var(--border); }
+.tr-day-down { align-items: flex-start; }
+.tr-day span { width: 100%; border-radius: 3px; }
+.tr-day-up span { background: var(--pos); border-radius: 3px 3px 0 0; } .tr-day-down span { background: var(--neg); border-radius: 0 0 3px 3px; }
+.tr-day:hover span { opacity: .8; }
+.tr-day-lbl { font-size: 10px; color: var(--text-muted); text-align: center; margin-top: 4px; font-variant-numeric: tabular-nums; }
+@media (max-width: 800px) { .tr-grid { grid-template-columns: 1fr; } .tr-big { font-size: 26px; } .tr-arrow { display: none; } .tr-wl b { font-size: 36px; } }

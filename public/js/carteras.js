@@ -470,7 +470,8 @@ function viewFutures(p) {
     <div class="actions"><button class="btn" data-action="new-aporte" data-pid="${p.id}">+ Aporte</button></div>
   </div>
   ${staleNotice(c.acc?.updated, ex)}
-  ${c.positions.length || c.closed.length ? resultBanner(c, {
+  ${ex === 'bitunix' ? tradingDashboard(p, c) : ''}
+  ${ex !== 'bitunix' && (c.positions.length || c.closed.length) ? resultBanner(c, {
     base: openMargin, baseTxt: 'de margen',
     side: [['Si cierro todo ahora', c.positions.reduce((a, x) => a + x.net, 0)], ['Operaciones cerradas', c.realized], ['Total (abiertas + cerradas)', c.unrealized + c.realized]],
   }) : ''}
