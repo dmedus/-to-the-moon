@@ -24,21 +24,24 @@ test('abierta: tamaño a precio de marca, ROE sobre el margen, comisión y fundi
   assert.equal(o.fundingRate, 0.0001);
 });
 
-test('cerrada: resultado neto = realizado − comisión + funding', () => {
+test('cerrada: realizedPNL ya es neto; un short puede venir como SELL', () => {
   const c = mapClosed({ positionId: '9', symbol: 'BTCUSDT', side: 'LONG', maxQty: '0.01', entryPrice: '80000', closePrice: '81000', fee: '0.96', funding: '-0.1', realizedPNL: '10', leverage: 10, ctime: 1, mtime: 2 });
   assert.equal(c.externalId, 'bitunix-9');
-  close(c.pnl, 10 - 0.96 - 0.1);
+  assert.equal(c.pnl, 10);
+  assert.equal(mapClosed({ positionId: '8', side: 'SELL' }).side, 'SHORT');
   close(c.fees, -0.96);
   assert.equal(c.margin, 80);
   assert.equal(c.exitPrice, 81000);
 });
 
-test('cierre parcial: solo si la abierta ya tiene algo realizado', () => {
-  const o = { ...mapOpen({ positionId: '5', symbol: 'SOLUSDT', side: 'LONG', qty: '5', avgOpenPrice: '100', margin: '50', leverage: 10, realizedPNL: '-3', mtime: 777, ctime: 100 }), };
+test('cierre parcial: lo realizado de la abierta, sin la comisión y el funding que ya trae', () => {
+  const o = mapOpen({ positionId: '5', symbol: 'SOLUSDT', side: 'LONG', qty: '5', avgOpenPrice: '100', margin: '50', leverage: 10, fee: '0.2', funding: '-0.1', realizedPNL: '-3.3', mtime: 777, ctime: 100 });
   const p = mapPartial(o);
   assert.equal(p.externalId, 'bitunix-parcial-5');
   assert.equal(p.partial, true);
-  assert.equal(p.pnl, -3);
+  close(p.pnl, -3);
+  // solo comisión y funding (lo que pasaba con GOOGL): no es un cierre parcial
+  assert.equal(mapPartial(mapOpen({ positionId: '7', qty: '1', fee: '0.05', funding: '-0.2', realizedPNL: '-0.25' })), null);
   assert.equal(p.close, 777);
   assert.equal(mapPartial(mapOpen({ positionId: '6', qty: '1', realizedPNL: '0' })), null);
 });

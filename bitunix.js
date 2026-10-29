@@ -7,7 +7,7 @@ const DAY = 864e5;
 const PORTFOLIO_ID = 'futuros-bitunix';
 
 const n = (x) => (x === undefined || x === null || x === '' || Number.isNaN(Number(x)) ? null : Number(x));
-const side = (s) => (String(s).toUpperCase() === 'SHORT' ? 'SHORT' : 'LONG');
+const side = (s) => (/SHORT|SELL/i.test(String(s)) ? 'SHORT' : 'LONG'); // en los short Bitunix puede mandar SELL
 const cost = (fee) => (fee == null ? null : -Math.abs(fee)); // la comisión siempre es un costo (negativo)
 
 // Firma de Bitunix: sha256(sha256(nonce + timestamp + apiKey + params ordenados + body) + secret), en hex.
@@ -41,7 +41,8 @@ async function market(symbol) {
   return d ? { markPrice: n(d.markPrice), fundingRate: n(d.fundingRate), fundingNextTime: n(d.nextFundingTime), fundingHours: n(d.fundingInterval) || 8 } : {};
 }
 
-// Posiciones cerradas: Bitunix las devuelve agrupadas, con el resultado sin comisiones ni funding
+// Posiciones cerradas: Bitunix las devuelve agrupadas. Aunque la documentación dice lo contrario, realizedPNL ya
+// trae restadas la comisión y el funding (se comprobó contra los precios de entrada y salida).
 async function closedPositions(request, start, end) {
   const out = [];
   for (let page = 0; page < 50; page++) {
@@ -64,32 +65,33 @@ function mapOpen(p, m = {}) {
     // Ya pagado (negativo = costo): comisiones + funding de la posición. El PnL no realizado no los incluye.
     feesPaid: (fee ?? 0) + (funding ?? 0), fundingTotal: funding, fundingTotalBase: funding,
     fundingRate: m.fundingRate ?? null, fundingNextTime: m.fundingNextTime ?? null, fundingHours: m.fundingHours ?? null,
-    _realized: n(p.realizedPNL), _mtime: n(p.mtime), _positionId: p.positionId,
+    // realizedPNL de una abierta ya trae restadas la comisión y el funding: lo cerrado de verdad es lo que sobra
+    _realized: n(p.realizedPNL) == null ? null : n(p.realizedPNL) - (fee ?? 0) - (funding ?? 0), _mtime: n(p.mtime), _positionId: p.positionId,
   };
 }
 
 // Lo ya cerrado de una posición que sigue abierta (cierre parcial). Cuando se cierra entera, llega en el historial
 // con todo el resultado y mergeSnapshot borra este renglón.
 function mapPartial(o) {
-  if (!o._realized) return null;
+  if (o._realized == null || Math.abs(o._realized) < 1e-6) return null;
   const notional = o.qty != null && o.entryPrice != null ? o.qty * o.entryPrice : null;
   return {
     externalId: `bitunix-parcial-${o._positionId}`, partial: true, market: o.market, symbol: o.symbol, side: o.side, leverage: o.leverage,
     status: 'closed', open: o.open, close: o._mtime, entries: null, qty: null, entryPrice: o.entryPrice, exitPrice: null,
     notional: null, margin: o.leverage && notional != null ? notional / o.leverage : null,
-    pnl: o._realized, fees: null, funding: null, // Bitunix da lo realizado sin comisiones; las comisiones y el funding quedan en la abierta
+    pnl: o._realized, fees: null, funding: null, // sin la comisión ni el funding: quedan en la abierta
   };
 }
 
 function mapClosed(h) {
   const qty = n(h.maxQty), entry = n(h.entryPrice), lev = n(h.leverage) || null;
   const notional = qty != null && entry != null ? qty * entry : null;
-  const fee = cost(n(h.fee)), funding = n(h.funding), gross = n(h.realizedPNL);
+  const fee = cost(n(h.fee)), funding = n(h.funding), net = n(h.realizedPNL);
   return {
     externalId: `bitunix-${h.positionId}`, market: 'USDT-M', symbol: h.symbol, side: side(h.side), leverage: lev, status: 'closed',
     open: n(h.ctime), close: n(h.mtime), entries: null, qty, entryPrice: entry, exitPrice: n(h.closePrice),
     notional, margin: lev && notional != null ? notional / lev : null,
-    pnl: gross == null ? null : gross + (fee ?? 0) + (funding ?? 0), fees: fee, funding,
+    pnl: net, fees: fee, funding,
   };
 }
 
