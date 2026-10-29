@@ -538,7 +538,7 @@ function viewFutures(p) {
   ${synced
     ? (state[ex].error ? `<div class="card section small">⚠ Última sincronización con ${EXCHANGE_NAMES[ex]} falló: ${esc(state[ex].error)}</div>` : '')
     : `<div class="card section small muted owner-only">Estos datos no se actualizan solos. Configurá tu API de solo lectura${ex ? ' de ' + EXCHANGE_NAMES[ex] : ''} en <a href="#/ajustes">Ajustes</a>.</div>`}
-  ${state.reglas.length ? `<div class="card section reglas-strip">
+  ${state.reglas.length && ex !== 'bitunix' ? `<div class="card section reglas-strip">
     <div class="card-head"><h2>Mis reglas</h2><a href="#/reglas" class="linkbtn">Ver todas →</a></div>
     <div class="reglas-row">${state.reglas.map((r, i) => reglaCard(r, i, true)).join('')}</div>
   </div>` : ''}
