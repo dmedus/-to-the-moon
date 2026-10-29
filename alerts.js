@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
+const NO_ALERTS = new Set(['futuros-bitunix']);
 const DEFAULT_RULES = { roe: [20, 30], liqPct: 10, fundingDayPct: 0.5, exdiv: true, coupons: true };
 const MES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const MES_IDX = { ene: 0, feb: 1, mar: 2, abr: 3, may: 4, jun: 5, jul: 6, ago: 7, sep: 8, set: 8, oct: 9, nov: 10, dic: 11 };
@@ -103,7 +104,8 @@ module.exports = function createAlerts({ DATA_DIR, userDir, readDb, activeUids, 
   }
 
   function futuresAlerts(db, a, out) {
-    const open = (db.futures || []).filter((f) => f.status === 'open');
+    // Bitunix es para operar en el día: sus posiciones no mandan alertas
+    const open = (db.futures || []).filter((f) => f.status === 'open' && !NO_ALERTS.has(f.portfolioId));
     const live = new Set();
     for (const f of open) {
       const id = f.externalId || f.id, name = `${f.symbol} ${f.side === 'SHORT' ? 'short' : 'long'} ${f.leverage ? f.leverage + 'x' : ''}`.trim();
