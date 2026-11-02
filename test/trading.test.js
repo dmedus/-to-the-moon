@@ -11,6 +11,7 @@ const ctx = vm.createContext({
   fetch: () => new Promise(() => {}), setInterval: () => 0, setTimeout: () => 0, Intl, console,
 });
 for (const f of ['base', 'trading']) vm.runInContext(fs.readFileSync(path.join(__dirname, `../public/js/${f}.js`), 'utf8'), ctx);
+const run = (name) => vm.runInContext(name, ctx); // las const de los scripts no quedan en ctx
 const close = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} ≠ ${b}`);
 const at = (d, h = 12) => new Date(`${d}T${String(h).padStart(2, '0')}:00:00`).getTime(); // mediodía local: el día no depende del huso
 
@@ -85,4 +86,15 @@ test('journalStats: caída máxima, rachas, días en verde y duración', () => {
   close(s.payoff, 6.5 / 3);
   close(s.hours, 7 / 4);
   close(s.expectancy, 1.5);
+});
+
+test('setup: se lee por id de la operación y agrupa el resultado por setup', () => {
+  vm.runInContext(`state.db = { settings: { setups: { a: 'Ruptura', b: 'Ruptura', c: 'Rebote' } } }`, ctx);
+  assert.equal(run('setupOf')({ externalId: 'a' }), 'Ruptura');
+  assert.equal(run('setupOf')({ externalId: 'z' }), '');
+  assert.deepEqual(JSON.parse(JSON.stringify(run('setupNames')())), ['Rebote', 'Ruptura']);
+  const html = ctx.setupTable([{ externalId: 'a', pnl: 5 }, { externalId: 'b', pnl: -2 }, { externalId: 'c', pnl: 3 }, { externalId: 'z', pnl: 1 }]);
+  assert.ok(html.indexOf('Ruptura') < html.indexOf('Rebote') && html.indexOf('Rebote') < html.indexOf('Sin setup')); // mayor resultado primero, sin setup al final
+  assert.equal(ctx.setupTable([{ externalId: 'z', pnl: 1 }]), ''); // nada clasificado: no hay tabla
+  vm.runInContext('state.db = null', ctx);
 });

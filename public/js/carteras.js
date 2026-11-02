@@ -561,7 +561,7 @@ function viewFutures(p) {
     <div class="table-wrap"><table>
       <thead><tr>${th(C, 'close', 'Cierre', false)}${th(C, 'symbol', 'Par', false)}<th>Cuenta</th><th>Lado</th>${th(C, 'leverage', 'Apal.')}
         ${th(C, 'entries', 'Entradas')}${th(C, 'entryPrice', 'Precio entrada')}${th(C, 'exitPrice', 'Precio salida')}${th(C, 'notional', 'Tamaño máx.')}${th(C, 'margin', 'Margen')}
-        ${th(C, 'fees', 'Comisiones')}${th(C, 'funding', 'Funding')}${th(C, 'pnl', 'Resultado')}${th(C, 'pct', '% s/margen')}${th(C, 'hours', 'Duración')}</tr></thead>
+        ${th(C, 'fees', 'Comisiones')}${th(C, 'funding', 'Funding')}${th(C, 'pnl', 'Resultado')}${th(C, 'pct', '% s/margen')}${th(C, 'hours', 'Duración')}${ex === 'bitunix' ? '<th>Setup</th>' : ''}</tr></thead>
       <tbody>${closed.length ? closed.map((x) => `<tr>
         <td>${dt(x.close)}</td><td class="ticker">${esc(x.symbol)}${x.partial ? ' <span class="tag" title="Cierre parcial: la posición sigue abierta. Cuando se cierre entera, este renglón se reemplaza por la posición completa">parcial</span>' : ''}</td><td>${esc(x.market)}</td><td>${side(x.side)}</td>
         <td class="num">${x.leverage ? num(+x.leverage) + 'x' : '—'}</td><td class="num">${x.entries ?? '—'}</td>
@@ -569,11 +569,11 @@ function viewFutures(p) {
         <td class="num ${cls(+x.fees)}">${x.fees != null ? signed(+x.fees) : '—'}</td>
         <td class="num ${cls(+x.funding)}">${x.funding != null ? signed(+x.funding) : '<span class="muted" title="BingX no informa el funding de coin-M">—*</span>'}</td>
         <td class="num ${cls(+x.pnl)}"><b>${signed(+x.pnl)}</b>${x.pnlBase != null ? ` <span class="muted small">(${num(+x.pnlBase, 6)} ${esc(x.symbol.split(/[-_]|USD/)[0])})</span>` : ''}</td>
-        <td class="num">${badge(x.pct)}</td><td class="num">${dur(x.hours)}</td></tr>`).join('') : '<tr><td colspan="15" class="empty">Sin operaciones cerradas.</td></tr>'}</tbody>
+        <td class="num">${badge(x.pct)}</td><td class="num">${dur(x.hours)}</td>${ex === 'bitunix' ? `<td>${setupInput(x)}</td>` : ''}</tr>`).join('') : `<tr><td colspan="${ex === 'bitunix' ? 16 : 15}" class="empty">Sin operaciones cerradas.</td></tr>`}</tbody>
       ${closed.length ? `<tfoot><tr><td colspan="9">Total</td><td class="num">${usd(closedMargin)}</td>
         <td class="num ${cls(c.costs.fees)}">${signed(c.costs.fees)}</td><td class="num ${cls(c.costs.funding)}">${signed(c.costs.funding)}${c.costs.fundingUnknown ? '*' : ''}</td>
         <td class="num ${cls(c.realized)}"><b>${signed(c.realized)}</b></td>
-        <td class="num">${badge(closedMargin ? c.realized / closedMargin : null)}</td><td></td></tr></tfoot>` : ''}
+        <td class="num">${badge(closedMargin ? c.realized / closedMargin : null)}</td><td></td>${ex === 'bitunix' ? '<td></td>' : ''}</tr></tfoot>` : ''}${ex === 'bitunix' ? setupDatalist() : ''}
     </table></div>
   </div>`;
 }

@@ -73,9 +73,18 @@ function equityChart(s, start, now) {
     <div class="chart-axis small muted"><span>${fmtDate(dayKey(t0))}</span><span>- - - lo que pusiste (${usd(start)})</span><span>hoy</span></div>`;
 }
 
+// ---------- Setup de cada operación ----------
+// Se guarda aparte (settings.setups: id de la operación → nombre), porque la sincronización reescribe las operaciones
+const setupKey = (x) => x.externalId || x.id;
+const setupOf = (x) => state.db?.settings?.setups?.[setupKey(x)] || '';
+const setupNames = () => [...new Set(Object.values(state.db?.settings?.setups || {}).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
+// Casilla para escribir el setup (sugiere los ya usados); al cambiarla se guarda
+const setupInput = (x) => `<input class="jr-setup" list="jr-setups" data-setup="${esc(setupKey(x))}" value="${esc(setupOf(x))}" placeholder="sin setup" maxlength="40"${isOwner() ? '' : ' disabled'}>`;
+const setupDatalist = () => `<datalist id="jr-setups">${setupNames().map((n) => `<option value="${esc(n)}">`).join('')}</datalist>`;
+
 // ---------- Diario: filtros, indicadores del período y calendario ----------
 // Lo que se elige en el diario queda en esta pantalla (el período se recuerda en el navegador)
-const diario = { period: prefGet('diarioPeriod', 'mes'), from: '', to: '', side: 'all', pair: 'all', month: null, shown: null };
+const diario = { period: prefGet('diarioPeriod', 'mes'), from: '', to: '', side: 'all', pair: 'all', setup: 'all', month: null, shown: null };
 const DIARIO_PERIODS = [['hoy', 'Hoy'], ['semana', 'Semana'], ['mes', 'Mes'], ['30d', '30d'], ['90d', '90d'], ['año', 'Año'], ['todo', 'Todo'], ['rango', 'Rango']];
 const DIAS_SEMANA = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
@@ -161,15 +170,34 @@ function journalCalendar(ops, month, base) {
   return `<div class="jr-cal">${DIAS_SEMANA.map((d) => `<div class="jr-head">${d}</div>`).join('')}<div class="jr-head">Semana</div>${html}</div>`;
 }
 
+// Resultado por setup en el período (las sin setup van al final)
+function setupTable(ops) {
+  const m = new Map();
+  for (const x of ops) { const k = setupOf(x); (m.get(k) || m.set(k, []).get(k)).push(x); }
+  if (m.size < 2 && m.has('')) return ''; // todavía nada clasificado
+  const rows = [...m.entries()].map(([k, l]) => ({ k, s: journalStats(l, 0) })).sort((a, b) => (!a.k) - (!b.k) || b.s.total - a.s.total);
+  return `<div class="table-wrap jr-setups"><table>
+    <thead><tr><th>Setup</th><th class="num">Operaciones</th><th class="num">Ganadas</th><th class="num">Perdidas</th><th class="num">Acierto</th>
+      <th class="num">Factor</th><th class="num">Promedio</th><th class="num">Resultado</th></tr></thead>
+    <tbody>${rows.map(({ k, s }) => `<tr><td>${k ? `<b>${esc(k)}</b>` : '<span class="muted">Sin setup</span>'}</td><td class="num">${s.n}</td>
+      <td class="num pos">${s.won}</td><td class="num neg">${s.lost}</td><td class="num">${s.winRate != null ? num(s.winRate * 100, 1) + '%' : '—'}</td>
+      <td class="num">${s.profitFactor != null ? num(s.profitFactor, 2) : s.won ? '∞' : '—'}</td><td class="num ${cls(s.expectancy)}">${signed(s.expectancy)}</td>
+      <td class="num ${cls(s.total)}"><b>${signed(s.total)}</b></td></tr>`).join('')}</tbody>
+  </table></div>`;
+}
+
 function journalCard(p, c, start) {
   const all = c.closed.filter((x) => x.close && x.pnl != null).map((x) => ({ ...x, pnl: +x.pnl, close: +x.close, open: +x.open || null })).sort((a, b) => a.close - b.close);
   const pairs = [...new Set(all.map((x) => coinOf(x.symbol)))].sort();
-  const pick = all.filter((x) => (diario.side === 'all' || x.side === diario.side) && (diario.pair === 'all' || coinOf(x.symbol) === diario.pair));
+  const setups = setupNames();
+  if (diario.setup !== 'all' && diario.setup !== 'none' && !setups.includes(diario.setup)) diario.setup = 'all'; // ese setup ya no se usa
+  const pick = all.filter((x) => (diario.side === 'all' || x.side === diario.side) && (diario.pair === 'all' || coinOf(x.symbol) === diario.pair)
+    && (diario.setup === 'all' || (diario.setup === 'none' ? !setupOf(x) : setupOf(x) === diario.setup)));
   const [t0, t1] = periodRange(diario.period, diario.from, diario.to);
   const ops = pick.filter((x) => x.close >= t0 && x.close <= t1);
   // La cuenta al empezar el período: lo puesto + lo ganado antes (con todas las operaciones, no solo las filtradas)
   const base = start + all.filter((x) => x.close < t0).reduce((a, x) => a + x.pnl, 0);
-  const s = journalStats(ops, base);
+  const s = journalStats(ops, base), pending = ops.filter((x) => !setupOf(x));
   const month = diario.month || dayKey(Math.min(Date.now(), isFinite(t1) ? t1 : Date.now())).slice(0, 7);
   diario.shown = month; // el mes que se ve: desde acá se mueven ◀ ▶
   const [cy, cm] = month.split('-').map(Number);
@@ -187,6 +215,7 @@ function journalCard(p, c, start) {
       ${diario.period === 'rango' ? `<span class="jr-range"><input type="date" data-diario="from" value="${esc(diario.from)}"> – <input type="date" data-diario="to" value="${esc(diario.to)}"></span>` : ''}
       <div class="seg sm">${[['all', 'Todas'], ['LONG', 'Long'], ['SHORT', 'Short']].map(([k, l]) => btn('diario-side', 'side', k, diario.side === k, l)).join('')}</div>
       <select data-diario="pair"><option value="all">Todos los pares</option>${pairs.map((x) => `<option value="${esc(x)}"${diario.pair === x ? ' selected' : ''}>${esc(x)}</option>`).join('')}</select>
+      <select data-diario="setup"><option value="all">Todos los setups</option><option value="none"${diario.setup === 'none' ? ' selected' : ''}>Sin setup</option>${setups.map((x) => `<option value="${esc(x)}"${diario.setup === x ? ' selected' : ''}>${esc(x)}</option>`).join('')}</select>
     </div>
     ${s.n ? `<div class="jr-kpis">
       ${tile('Resultado neto', signed(s.total), ofBase(s.total), cls(s.total))}
@@ -206,9 +235,17 @@ function journalCard(p, c, start) {
       <div><b class="pos">${s.won}</b><span>Ganadoras</span></div>
       <div><b class="muted">${s.even}</b><span>Parejas</span></div>
       <div><b class="neg">${s.lost}</b><span>Perdedoras</span></div>
+      <div><b class="jr-pend">${pending.length}</b><span>Sin setup</span></div>
       <label class="jr-min small muted" title="Una operación que ganó o perdió menos de esto no cuenta ni como ganada ni como perdida">Pareja si gana o pierde menos de US$
         <input type="number" min="0" step="0.5" data-diario="minTrade" value="${minTrade()}"></label>
-    </div>` : '<div class="empty">No hay operaciones cerradas en este período.</div>'}
+    </div>
+    ${setupTable(ops)}
+    ${pending.length ? `<details class="jr-pending"${pending.length <= 12 ? ' open' : ''}><summary><b>Clasificá ${pending.length === 1 ? 'la operación' : `las ${pending.length} operaciones`} sin setup</b> <span class="small muted">escribí el setup o elegí uno que ya usaste</span></summary>
+      <div class="table-wrap"><table><tbody>${pending.slice().reverse().map((x) => `<tr><td>${new Date(x.close).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</td>
+        <td class="ticker">${esc(coinOf(x.symbol))}</td><td><span class="tag ${x.side === 'LONG' ? 'buy' : 'sell'}">${x.side === 'LONG' ? 'Long' : 'Short'}</span></td>
+        <td class="num ${cls(x.pnl)}"><b>${signed(x.pnl)}</b></td><td>${setupInput(x)}</td></tr>`).join('')}</tbody></table></div>
+    </details>` : ''}
+    ${setupDatalist()}` : '<div class="empty">No hay operaciones cerradas en este período.</div>'}
     <div class="card-head jr-cal-head">
       <h2>Calendario</h2>
       <div class="jr-nav"><button type="button" class="btn sm" data-action="diario-mes" data-step="-1" aria-label="Mes anterior">◀</button>
@@ -216,7 +253,7 @@ function journalCard(p, c, start) {
         <button type="button" class="btn sm" data-action="diario-mes" data-step="1" aria-label="Mes siguiente">▶</button></div>
     </div>
     ${journalCalendar(pick, month, start + all.filter((x) => x.close < new Date(cy, cm - 1, 1).getTime()).reduce((a, x) => a + x.pnl, 0))}
-    <p class="small muted" style="margin:8px 0 0">El calendario usa el lado y el par elegidos. Tocá un día para ver solo ese día arriba. El % es sobre la cuenta al empezar el período (o el mes).</p>
+    <p class="small muted" style="margin:8px 0 0">El calendario usa el lado, el par y el setup elegidos. Tocá un día para ver solo ese día arriba. El % es sobre la cuenta al empezar el período (o el mes).</p>
   </div>`;
 }
 

@@ -222,6 +222,11 @@ function download(name, content, type) {
 
 document.addEventListener('change', async (e) => {
   const el = e.target;
+  if (el.dataset.setup != null && isOwner()) { // Setup de una operación de trading (vacío = sin setup)
+    const m = ((state.db.settings ||= {}).setups ||= {}), v = el.value.trim().slice(0, 40);
+    if (v) m[el.dataset.setup] = v; else delete m[el.dataset.setup];
+    save(); return render();
+  }
   if (el.dataset.diario) { // Diario de trading: fechas del rango, par y umbral de "pareja"
     const k = el.dataset.diario;
     if (k === 'minTrade') { (state.db.settings ||= {}).minTrade = Math.max(0, +el.value || 0); save(); } else diario[k] = el.value;

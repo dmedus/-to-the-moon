@@ -562,6 +562,13 @@ tbody[data-reorder] > tr.dragging td { background: var(--surface-1); }
 .jr-class span { color: var(--text-muted); font-size: 13px; }
 .jr-min { margin-left: auto; display: flex; align-items: center; gap: 6px; }
 .jr-min input { width: 64px; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: inherit; font: inherit; }
+.jr-pend { color: #c98a00; }
+.jr-setup { width: 130px; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: inherit; font: inherit; font-size: 13px; }
+.jr-setup:placeholder-shown { border-style: dashed; }
+.jr-setups { margin-top: 12px; }
+.jr-pending { margin-top: 12px; border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; }
+.jr-pending summary { cursor: pointer; }
+.jr-pending table { margin-top: 8px; }
 .jr-cal-head { margin-top: 20px; }
 .jr-nav { display: flex; align-items: center; gap: 10px; }
 .jr-nav b { min-width: 120px; text-align: center; }
