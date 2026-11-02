@@ -54,3 +54,35 @@ test('tradeStats: agrupa por día y por mes', () => {
   assert.equal(nov.pnl, 3.5);
   assert.equal(ctx.tradeStats([{ close: at('2026-10-28'), pnl: -1 }]).streak, -1);
 });
+
+test('periodRange: semana desde el lunes, mes, rango con días enteros', () => {
+  const now = at('2026-10-29', 15); // jueves
+  assert.equal(ctx.periodRange('semana', '', '', now)[0], at('2026-10-26', 0));
+  assert.equal(ctx.periodRange('mes', '', '', now)[0], at('2026-10-01', 0));
+  assert.equal(ctx.periodRange('hoy', '', '', now)[0], at('2026-10-29', 0));
+  const [a, b] = ctx.periodRange('rango', '2026-10-05', '2026-10-05', now);
+  assert.equal(a, at('2026-10-05', 0));
+  assert.equal(b, at('2026-10-06', 0) - 1);
+  assert.equal(ctx.periodRange('todo', '', '', now)[0], -Infinity);
+});
+
+test('journalStats: caída máxima, rachas, días en verde y duración', () => {
+  const ops = [
+    { close: at('2026-10-27'), open: at('2026-10-27', 10), pnl: 10 },
+    { close: at('2026-10-27', 14), open: at('2026-10-27', 13), pnl: -4 },
+    { close: at('2026-10-28'), open: at('2026-10-28', 11), pnl: -2 },
+    { close: at('2026-10-28', 13), pnl: 0.5 }, // pareja: no corta la racha
+    { close: at('2026-10-29'), open: at('2026-10-29', 9), pnl: 3 },
+  ];
+  const s = ctx.journalStats(ops, 100);
+  close(s.total, 7.5);
+  assert.equal(s.drawdown, 6); // de 110 a 104
+  close(s.drawdownPct, 6 / 110);
+  assert.equal(s.maxWinStreak, 1);
+  assert.equal(s.maxLossStreak, 2);
+  assert.equal(s.days, 3);
+  assert.equal(s.greenDays, 2); // 27: +6, 28: −1,5, 29: +3
+  close(s.payoff, 6.5 / 3);
+  close(s.hours, 7 / 4);
+  close(s.expectancy, 1.5);
+});

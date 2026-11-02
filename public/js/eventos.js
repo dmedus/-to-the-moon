@@ -19,7 +19,7 @@ document.addEventListener('click', (e) => {
   const { action, id, pid } = a.dataset;
   const db = state.db;
   // El invitado solo puede mirar (el servidor igual rechaza cualquier cambio suyo)
-  if (!isOwner() && !['alloc-mode', 'ver-regla', 'watch-sel', 'watch-range', 'watch-hrange', 'watch-mode', 'watch-unsort', 'pos-unsort', 'watch-ma', 'watch-tab', 'hist-range'].includes(action)) return; // el invitado solo mira
+  if (!isOwner() && !['alloc-mode', 'ver-regla', 'watch-sel', 'watch-range', 'watch-hrange', 'watch-mode', 'watch-unsort', 'pos-unsort', 'watch-ma', 'watch-tab', 'hist-range', 'diario-period', 'diario-side', 'diario-mes', 'diario-dia'].includes(action)) return; // el invitado solo mira
   switch (action) {
     case 'new-tx': return txForm({ portfolioId: pid, ticker: a.dataset.ticker, side: a.dataset.side });
     case 'edit-tx': return txForm({ ...db.transactions.find((t) => t.id === id) });
@@ -168,6 +168,16 @@ document.addEventListener('click', (e) => {
       const [kind, sym] = a.dataset.key.split(':');
       return priceAlertForm(kind, sym, watch.data[a.dataset.key]?.price);
     }
+    case 'diario-period': // Diario de trading: período, lado, mes del calendario y día
+      diario.period = a.dataset.period; prefSet('diarioPeriod', diario.period); return render();
+    case 'diario-side':
+      diario.side = a.dataset.side; return render();
+    case 'diario-mes': {
+      const [y, m] = (diario.shown || dayKey(Date.now()).slice(0, 7)).split('-').map(Number);
+      diario.month = dayKey(new Date(y, m - 1 + +a.dataset.step, 1).getTime()).slice(0, 7); return render();
+    }
+    case 'diario-dia':
+      Object.assign(diario, { period: 'rango', from: a.dataset.day, to: a.dataset.day }); return render();
     case 'hist-range':
       hist.range = a.dataset.range; hist.hover = null; prefSet('histRange', hist.range); return render();
     case 'install-app':
@@ -212,6 +222,11 @@ function download(name, content, type) {
 
 document.addEventListener('change', async (e) => {
   const el = e.target;
+  if (el.dataset.diario) { // Diario de trading: fechas del rango, par y umbral de "pareja"
+    const k = el.dataset.diario;
+    if (k === 'minTrade') { (state.db.settings ||= {}).minTrade = Math.max(0, +el.value || 0); save(); } else diario[k] = el.value;
+    return render();
+  }
   if (el.dataset.histPid != null) { hist.pid = el.value; hist.hover = null; return render(); } // Evolución: elegir cartera
   if (el.dataset.bkOpt) { // Copia de seguridad: destinos
     return postJson('/api/backup/options', { [el.dataset.bkOpt]: el.checked }).then(loadBackup).catch((err) => toast(err.message));
