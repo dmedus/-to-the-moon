@@ -15,6 +15,9 @@ const WINDOW = 600; // velas de 4 h que ve el escáner (igual que en vivo)
 const TIMEOUT = 60; // si en 10 días no tocó stop ni TP, se cierra al precio
 // Variantes (variables de entorno): RR_MIN=1.5 (riesgo/beneficio mínimo), TENDENCIA=1 (solo a favor), NIVEL3=1 (entrada 1 de nivel 3), MAX_ENTRADAS=2
 const RR_MIN = +process.env.RR_MIN || 0, TREND_ONLY = !!process.env.TENDENCIA, LEVEL3 = !!process.env.NIVEL3, MAX_ENTRIES = +process.env.MAX_ENTRADAS || 3;
+// CONFIRMA=1: en vez de órdenes límite, espera que el precio toque una zona y una vela de confirmación (pinbar o envolvente)
+// dentro de las 3 velas siguientes; entra al cierre de esa vela con una sola entrada y el stop detrás de la mecha.
+const CONFIRM = !!process.env.CONFIRMA, CONFIRM_BARS = 3, STOP_ATR = process.env.STOP_ATR != null ? +process.env.STOP_ATR : 0.2; // colchón del stop detrás de la mecha, en ATR
 
 async function klines(symbol, interval, from) {
   const file = path.join(DIR, `${symbol}-${interval}.json`);
@@ -109,6 +112,64 @@ function simulate(symbol, c4, c1d, start) {
   return trades;
 }
 
+const rangeAvg = (c, i, n = 14) => c.slice(Math.max(0, i - n + 1), i + 1).reduce((a, x) => a + x.h - x.l, 0) / Math.min(n, i + 1);
+// Vela de confirmación a favor de "side": envolvente o pinbar (mecha del lado de la zona de al menos 2 cuerpos)
+function confirms(side, b, prev) {
+  const body = Math.abs(b.c - b.o), range = b.h - b.l || 1e-12;
+  if (side === 'long') {
+    const engulf = b.c > b.o && prev.c < prev.o && b.c >= prev.o && b.o <= prev.c;
+    const pin = Math.min(b.o, b.c) - b.l >= 2 * body && (b.c - b.l) / range >= 0.6;
+    return engulf || pin;
+  }
+  const engulf = b.c < b.o && prev.c > prev.o && b.c <= prev.o && b.o >= prev.c;
+  const pin = b.h - Math.max(b.o, b.c) >= 2 * body && (b.h - b.c) / range >= 0.6;
+  return engulf || pin;
+}
+
+function simulateConfirm(symbol, c4, c1d, start) {
+  const trades = [];
+  let plans = null, armed = null, trade = null, d = 0;
+  const close = (i, exit, why) => {
+    const t = trade, dir = t.side === 'long' ? 1 : -1, notional = ACCOUNT * CFG.coinPct * t.lev, qty = notional / t.entry;
+    const pnl = dir * qty * (exit - t.entry) - FEE * (notional + qty * exit);
+    trades.push({ symbol, side: t.side, open: c4[t.open].t, close: c4[i].t, why, fills: 1, lev: t.lev, level: t.level, withTrend: t.withTrend, pnl, pct: pnl / ACCOUNT });
+    trade = null;
+  };
+  for (let i = WINDOW; i < c4.length; i++) {
+    const bar = c4[i], prev = c4[i - 1];
+    if (trade) {
+      const long = trade.side === 'long';
+      if (long ? bar.l <= trade.stop : bar.h >= trade.stop) close(i, trade.stop, 'stop');
+      else if (long ? bar.h >= trade.tp : bar.l <= trade.tp) close(i, trade.tp, 'tp');
+      else if (i - trade.open >= TIMEOUT) close(i, bar.c, 'tiempo');
+    } else {
+      // ¿tocó alguna zona del plan puesto al cierre anterior? (la más profunda que tocó)
+      for (const p of plans || []) {
+        const long = p.side === 'long', hit = p.entries.filter((e) => (long ? bar.l <= e.price : bar.h >= e.price)).at(-1);
+        if (hit && (!armed || armed.side !== p.side || (long ? hit.price < armed.zone : hit.price > armed.zone))) armed = { side: p.side, zone: hit.price, level: hit.level, tp: p.tp, withTrend: p.withTrend, since: i, ext: long ? bar.l : bar.h };
+      }
+      if (armed) {
+        const long = armed.side === 'long', atr = rangeAvg(c4, i);
+        armed.ext = long ? Math.min(armed.ext, bar.l) : Math.max(armed.ext, bar.h);
+        const holds = long ? bar.c > armed.zone - 0.5 * atr : bar.c < armed.zone + 0.5 * atr; // cerró sin perder la zona
+        if (holds && confirms(armed.side, bar, prev)) {
+          const entry = bar.c, stop = long ? armed.ext - STOP_ATR * atr : armed.ext + STOP_ATR * atr;
+          const rr = (long ? armed.tp - entry : entry - armed.tp) / Math.abs(entry - stop);
+          const lev = Math.min(CFG.leverage, Math.floor((ACCOUNT * CFG.maxRisk) / ((ACCOUNT * CFG.coinPct * Math.abs(entry - stop)) / entry)));
+          if (rr >= Math.max(RR_MIN, 0.5) && lev >= 1) trade = { side: armed.side, entry, stop, tp: armed.tp, lev, level: armed.level, withTrend: armed.withTrend, open: i };
+          armed = null;
+        } else if (!holds || i - armed.since >= CONFIRM_BARS) armed = null;
+      }
+    }
+    if (!trade && bar.t >= start) {
+      while (d < c1d.length && c1d[d].t + D1 <= bar.t + H4) d++;
+      const r = analyze(symbol, c4.slice(i - WINDOW + 1, i + 1), c1d.slice(Math.max(0, d - 200), d), ACCOUNT);
+      plans = [r.long, r.short].filter((p) => p && p.tp && (!TREND_ONLY || p.withTrend) && (!LEVEL3 || p.entries[0].level >= 3));
+    }
+  }
+  return trades;
+}
+
 function stats(list) {
   const n = list.length, won = list.filter((t) => t.pnl > 0), lost = list.filter((t) => t.pnl <= 0);
   const gw = won.reduce((a, t) => a + t.pnl, 0), gl = -lost.reduce((a, t) => a + t.pnl, 0);
@@ -125,12 +186,12 @@ const row = (name, s) => `${name.padEnd(22)} ${String(s.n).padStart(5)}  ${(s.wi
     const c4 = (await klines(s, '4h', start)).filter((x) => x.t + H4 <= Date.now());
     const c1d = await klines(s, '1d', start - 200 * D1);
     if (c4.length <= WINDOW) { console.log(`${s}: pocas velas (${c4.length}), se saltea`); continue; }
-    const t = simulate(s, c4, c1d, start);
+    const t = (CONFIRM ? simulateConfirm : simulate)(s, c4, c1d, start);
     console.error(`${s}: ${c4.length} velas desde ${new Date(c4[WINDOW].t).toISOString().slice(0, 10)}, ${t.length} operaciones`);
     all.push(...t);
   }
   const by = (f) => { const m = {}; for (const t of all) (m[f(t)] ||= []).push(t); return m; };
-  console.log(`\nBacktest del escáner · últimos ${DAYS} días${RR_MIN ? ` · R/B ≥ ${RR_MIN}` : ''}${TREND_ONLY ? ' · solo a favor de tendencia' : ''}${LEVEL3 ? ' · entrada 1 nivel 3' : ''}${MAX_ENTRIES < 3 ? ` · máx. ${MAX_ENTRIES} entradas` : ''} · cuenta fija US$ ${ACCOUNT} · comisión ${FEE * 100}% por lado\n`);
+  console.log(`\nBacktest del escáner · últimos ${DAYS} días${RR_MIN ? ` · R/B ≥ ${RR_MIN}` : ''}${TREND_ONLY ? ' · solo a favor de tendencia' : ''}${LEVEL3 ? ' · entrada 1 nivel 3' : ''}${MAX_ENTRIES < 3 ? ` · máx. ${MAX_ENTRIES} entradas` : ''}${CONFIRM ? ' · CON VELA DE CONFIRMACIÓN' : ''} · cuenta fija US$ ${ACCOUNT} · comisión ${FEE * 100}% por lado\n`);
   console.log(`${''.padEnd(22)}   ops  acierto  resultado   s/cuenta  factor  prom/op  máx.caída`);
   console.log(row('TOTAL', stats(all)));
   for (const [k, v] of Object.entries(by((t) => t.symbol))) console.log(row(k, stats(v)));
