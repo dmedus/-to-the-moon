@@ -549,7 +549,9 @@ tbody[data-reorder] > tr.dragging td { background: var(--surface-1); }
 .esc-pair { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
 .esc-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-variant-numeric: tabular-nums; }
 .esc-plan { display: flex; flex-direction: column; gap: 2px; font-size: 13px; font-variant-numeric: tabular-nums; border-top: 1px dashed var(--border); padding-top: 6px; }
-.esc-side { font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+.esc-side { font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; display: flex; justify-content: space-between; gap: 6px; }
+.esc-flag { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--text-muted); }
+.esc-off { opacity: .55; }
 .jr-filters { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 4px 0 14px; }
 .jr-filters .seg { flex: none; }
 .jr-filters .seg button { flex: none; padding: 6px 10px; font-size: 13px; color: inherit; }

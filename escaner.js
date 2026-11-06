@@ -16,6 +16,7 @@ const CFG = {
   maxRisk: 0.02, // pérdida máxima si saltan las 3 entradas y el stop: 2% de la cuenta
   leverage: 10,
   nearPct: 0.015, // aviso de "se acerca a la entrada 1"
+  alertRR: 1.5, // por Telegram solo avisa a favor de la tendencia y con R/B ≥ 1,5 (en el backtest, lo demás perdía)
 };
 
 // ---------- Indicadores ----------
@@ -138,11 +139,16 @@ function analyze(symbol, c4, c1d, account) {
     price, atr: atr(c4), ema50: ema(closes, 50).at(-1), ema200: ema(closes, 200).at(-1), bb: bollinger(closes),
     rsi: rsi(closes), macd: macd(closes), fib: fibOf(c1d),
   };
-  const zones = zonesOf(c4, ctx.atr);
+  const zones = zonesOf(c4, ctx.atr), trend = ctx.ema50 > ctx.ema200 ? 'alcista' : 'bajista';
+  const mark = (p) => {
+    if (!p) return null;
+    const withTrend = (p.side === 'long') === (trend === 'alcista');
+    const skip = !withTrend ? 'contra la tendencia' : !(p.rr >= CFG.alertRR) ? `R/B menor a ${CFG.alertRR}` : null;
+    return { ...p, withTrend, alert: !skip, skip };
+  };
   return {
-    symbol, price, time: c4.at(-1).t, rsi: ctx.rsi, ema50: ctx.ema50, ema200: ctx.ema200,
-    trend: ctx.ema50 > ctx.ema200 ? 'alcista' : 'bajista', fib: ctx.fib,
-    long: planOf('long', zones, ctx, account), short: planOf('short', zones, ctx, account),
+    symbol, price, time: c4.at(-1).t, rsi: ctx.rsi, ema50: ctx.ema50, ema200: ctx.ema200, trend, fib: ctx.fib,
+    long: mark(planOf('long', zones, ctx, account)), short: mark(planOf('short', zones, ctx, account)),
   };
 }
 
@@ -201,7 +207,7 @@ module.exports = function createEscaner({ DATA_DIR, readDb, sendToOwner, log = c
         } catch (e) { log('Escáner', s, e.message); }
       }
       const fresh = [], close = [], live = {};
-      for (const r of results) for (const p of [r.long, r.short].filter(Boolean)) {
+      for (const r of results) for (const p of [r.long, r.short].filter((x) => x?.alert)) {
         const k = keyOf(r, p); live[k] = 1;
         if (!state.sent[k]) { fresh.push(planText(r, p)); state.sent[k] = Date.now(); }
         if (!state.near[k] && Math.abs(r.live / p.entries[0].price - 1) <= CFG.nearPct) {
