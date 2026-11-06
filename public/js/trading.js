@@ -257,6 +257,38 @@ function journalCard(p, c, start) {
   </div>`;
 }
 
+// ---------- Escáner de zonas (escaner.js en el servidor): solo el dueño ----------
+const escanerUI = { data: null, loading: false, at: 0 };
+async function loadEscaner(force) {
+  if (escanerUI.loading) return;
+  escanerUI.loading = true;
+  try { escanerUI.data = await (force ? postJson('/api/escaner/run', {}) : api('/api/escaner')); escanerUI.at = Date.now(); }
+  catch { /* queda lo anterior */ }
+  finally { escanerUI.loading = false; }
+  render();
+}
+function escanerCard() {
+  if (!isAdmin()) return '';
+  if (!escanerUI.data || Date.now() - escanerUI.at > 5 * 60e3) setTimeout(loadEscaner, 0);
+  const d = escanerUI.data;
+  const px = (v) => (v == null ? '—' : num(v, v >= 1000 ? 1 : v >= 10 ? 2 : 4));
+  const plan = (pl) => `<div class="esc-plan"><div class="esc-side ${pl.side === 'long' ? 'pos' : 'neg'}">${pl.side === 'long' ? 'Long' : 'Short'}</div>
+      ${pl.entries.map((e, i) => `<div class="hit" data-tip="${esc(e.why.join(' · '))}">${i + 1}) <b>${px(e.price)}</b> <span class="muted">${Math.round(e.pct * 100)}%</span> <span class="tag ${e.level === 3 ? 'buy' : ''}">N${e.level}</span></div>`).join('')}
+      <div class="small"><span class="muted">Prom.</span> ${px(pl.avg)} · <span class="muted">Stop</span> <span class="neg">${px(pl.stop)}</span> · <span class="muted">TP</span> <span class="pos">${px(pl.tp)}</span>${pl.rr ? ` · R/B ${num(pl.rr, 1)}` : ''}</div>
+      <div class="small ${pl.risk > 0.02 ? 'neg' : 'muted'}">Riesgo ${pct(pl.risk).replace('+', '')} de la cuenta a ${pl.leverage}x${pl.risk > 0.02 ? ` · máx. ${pl.maxLeverage}x para quedar en 2%` : ''}</div></div>`;
+  return `<div class="card section">
+    <div class="card-head"><h2>Escáner de zonas <span class="muted small">(velas de 4 h · niveles 1/2/3)</span></h2>
+      <span class="small muted">${d?.updated ? 'actualizado ' + new Date(d.updated).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : ''}
+        <button class="btn sm" data-action="escaner-run"${escanerUI.loading ? ' disabled' : ''}>${escanerUI.loading ? 'Revisando…' : 'Revisar ahora'}</button></span></div>
+    ${!d ? '<div class="muted small">Cargando…</div>' : `<div class="esc-grid">${d.results.map((r) => `<div class="esc-pair">
+      <div class="esc-head"><b>${esc(coinOf(r.symbol))}</b> <span>${px(r.price)}</span>
+        <span class="tag ${r.trend === 'alcista' ? 'buy' : 'sell'}">${r.trend}</span> <span class="muted small">RSI ${Math.round(r.rsi)}</span></div>
+      ${r.long || r.short ? [r.long, r.short].filter(Boolean).map(plan).join('') : '<div class="muted small">Sin zonas de nivel 2 sólido o 3 cerca.</div>'}
+    </div>`).join('')}</div>`}
+    <p class="small muted" style="margin:8px 0 0">Entradas límite 15/30/55% del 10% de la cuenta; stop detrás de la zona siguiente; TP en la zona opuesta. Pasá el mouse por cada entrada para ver sus confirmaciones. Cuando aparece un setup nuevo o el precio se acerca a la entrada 1, te avisa por Telegram. No opera solo: antes de entrar esperá la vela de confirmación.</p>
+  </div>`;
+}
+
 function tradingDashboard(p, c) {
   const s = tradeStats(c.closed);
   const put = c.deposits, now = c.value, res = put ? now - put : null;
@@ -305,6 +337,8 @@ function tradingDashboard(p, c) {
       ${equityChart(s, put || now - s.total - c.unrealized, now) || '<div class="empty">Todavía no hay operaciones cerradas.</div>'}
     </div>
   </div>
+
+  ${escanerCard()}
 
   ${s.ops.length ? journalCard(p, c, put || now - s.total - c.unrealized) : ''}
 

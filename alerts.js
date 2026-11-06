@@ -273,6 +273,11 @@ Llevás ${usd(-f.fundingTotal)} pagados` : ''}`);
     if (!j?.ok) throw new Error('Telegram: ' + (j?.description || 'HTTP ' + r.status));
   }
   const ownerLinked = () => !!(bot() && load('owner').chatId);
+  // Mensaje al chat del dueño (lo usa el escáner); sin Telegram conectado no hace nada
+  async function sendToOwner(text) {
+    const chatId = load('owner').chatId;
+    if (bot() && chatId) await send(chatId, text);
+  }
 
-  return { status, setBot, removeBot, linkCode, unlink, test, setRules, addTarget, removeTarget, poll, run, sendFileToOwner, ownerLinked, _test: { scheduledPoll } };
+  return { status, setBot, removeBot, linkCode, unlink, test, setRules, addTarget, removeTarget, poll, run, sendFileToOwner, sendToOwner, ownerLinked, _test: { scheduledPoll } };
 };

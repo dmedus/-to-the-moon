@@ -579,6 +579,9 @@ const alerts = require('./alerts')({
   quotes: { stockQuote, cryptoQuote, bondQuote },
 });
 
+// ---------- Escáner de zonas de Bitunix (escaner.js): avisa al dueño por Telegram ----------
+const escaner = require('./escaner')({ DATA_DIR, readDb, sendToOwner: (t) => alerts.sendToOwner(t) });
+
 // ---------- Copia de seguridad diaria (backup.js): OneDrive + Telegram del dueño ----------
 const backup = require('./backup')({ DATA_DIR, keystore, sendTelegramFile: (name, buf, caption) => alerts.sendFileToOwner(name, buf, caption) });
 
@@ -933,6 +936,14 @@ const server = http.createServer(async (req, res) => {
       })));
     }
     if (!canEdit && p.startsWith('/api/')) return send(res, 403, { error: 'No autorizado.' });
+
+    // Escáner de zonas: solo el dueño (usa la cuenta de Bitunix del dueño para calcular el riesgo)
+    if (p.startsWith('/api/escaner')) {
+      if (session.role !== 'owner') return send(res, 403, { error: 'Solo el administrador ve el escáner.' });
+      if (p === '/api/escaner' && req.method === 'GET') return send(res, 200, escaner.status());
+      if (p === '/api/escaner/run' && req.method === 'POST') { await escaner.run(); return send(res, 200, escaner.status()); }
+      return send(res, 404, { error: 'No encontrado' });
+    }
 
     // Copia de seguridad: solo el dueño (incluye los datos de todos los usuarios)
     if (p.startsWith('/api/backup')) {

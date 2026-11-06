@@ -168,6 +168,8 @@ document.addEventListener('click', (e) => {
       const [kind, sym] = a.dataset.key.split(':');
       return priceAlertForm(kind, sym, watch.data[a.dataset.key]?.price);
     }
+    case 'escaner-run': // Escáner de zonas: revisar ya
+      escanerUI.loading = false; return loadEscaner(true);
     case 'diario-period': // Diario de trading: período, lado, mes del calendario y día
       diario.period = a.dataset.period; prefSet('diarioPeriod', diario.period); return render();
     case 'diario-side':
