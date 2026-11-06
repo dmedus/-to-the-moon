@@ -1,4 +1,4 @@
-// Escáner de zonas (estrategia de niveles 1/2/3): cada 15 minutos mira las velas de 4 h de Bitunix (públicas, sin claves),
+// Escáner de zonas (estrategia de niveles 1/2/3): una vez por día (11:30 de Argentina) o a pedido mira las velas de 4 h de Bitunix (públicas, sin claves),
 // marca soportes y resistencias, les suma confirmaciones (EMA 200/50, Fibonacci diario, Bollinger) y arma un plan de
 // 3 entradas límite (15/30/55% del 10% de la cuenta) con stop al 1-2% de la cuenta. Avisa por Telegram al dueño; no opera.
 const fs = require('fs');
@@ -227,8 +227,13 @@ module.exports = function createEscaner({ DATA_DIR, readDb, sendToOwner, log = c
     } catch (e) { state.error = e.message; log('Escáner:', e.message); }
     finally { running = false; }
   }
-  setTimeout(run, 30_000);
-  setInterval(run, 15 * 60_000);
+  // Una vez por día a las 11:30 de Argentina (UTC−3); si la app estaba apagada a esa hora, corre al prender.
+  // A mano se puede correr cuando quieras desde la tarjeta (POST /api/escaner/run).
+  const slot = (now) => { const d = new Date(now - 3 * 3600e3); d.setUTCHours(11, 30, 0, 0); const t = d.getTime() + 3 * 3600e3; return t > now ? t - 86400e3 : t; };
+  if (!state.lastAuto && state.updated) state.lastAuto = Date.parse(state.updated); // no repetir lo que ya corrió hoy
+  const tick = () => { const s = slot(Date.now()); if ((state.lastAuto || 0) < s) { state.lastAuto = Date.now(); run(); } };
+  setTimeout(tick, 30_000);
+  setInterval(tick, 60_000);
   return { status: () => ({ ...state, sent: undefined, near: undefined, pairs: PAIRS, cfg: CFG }), run };
 };
 module.exports._test = { ema, rsi, bollinger, zonesOf, fibOf, scoreZone, planOf, analyze, CFG };
