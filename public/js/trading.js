@@ -279,7 +279,7 @@ function escanerCard() {
       <div class="small ${pl.risk > 0.02 ? 'neg' : 'muted'}">Riesgo ${pct(pl.risk).replace('+', '')} de la cuenta a ${pl.leverage}x${pl.risk > 0.02 ? ` · máx. ${pl.maxLeverage}x para quedar en 2%` : ''}</div></div>`;
   return `<div class="card section">
     <div class="card-head"><h2>Escáner de zonas <span class="muted small">(velas de 4 h · niveles 1/2/3)</span></h2>
-      <span class="small muted">${d?.updated ? 'actualizado ' + new Date(d.updated).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : ''}
+      <span class="small muted">${d?.updated ? 'actualizado ' + new Date(d.updated).toLocaleString('es-AR', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
         <button class="btn sm" data-action="escaner-run"${escanerUI.loading ? ' disabled' : ''}>${escanerUI.loading ? 'Revisando…' : 'Revisar ahora'}</button></span></div>
     ${!d ? '<div class="muted small">Cargando…</div>' : `<div class="esc-grid">${d.results.map((r) => `<div class="esc-pair">
       <div class="esc-head"><b>${esc(coinOf(r.symbol))}</b> <span>${px(r.price)}</span>
