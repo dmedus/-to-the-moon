@@ -146,11 +146,16 @@ function computeFutures(p) {
       liqDist: f.liq && f.markPrice ? f.liq / f.markPrice - 1 : null,
     };
   });
-  const closed = all.filter((f) => f.status === 'closed').map((f) => ({ ...f, pct: f.margin ? f.pnl / f.margin : null, hours: f.close && f.open ? (f.close - f.open) / 36e5 : null }));
+  // Conteo reiniciado (p.statsFrom = fecha AAAA-MM-DD, p.statsBase = saldo de la cuenta ese día a las 0 h): lo cerrado antes
+  // queda guardado pero no cuenta, y "lo que pusiste" pasa a ser ese saldo + los aportes desde esa fecha.
+  const from = p.statsFrom ? new Date(p.statsFrom + 'T00:00:00').getTime() : null;
+  const closed = all.filter((f) => f.status === 'closed' && (from == null || (+f.close || 0) >= from))
+    .map((f) => ({ ...f, pct: f.margin ? f.pnl / f.margin : null, hours: f.close && f.open ? (f.close - f.open) / 36e5 : null }));
   const value = (acc?.accounts || []).reduce((a, x) => a + (+x.equityUSD || 0), 0);
   for (const x of positions) x.weight = value ? x.value / value : 0;
   const unrealized = positions.reduce((a, x) => a + (+x.pnl || 0), 0);
-  const deposits = state.db.deposits.filter((d) => d.portfolioId === p.id).reduce((a, d) => a + +d.amount, 0);
+  const deposits = (from == null ? 0 : +p.statsBase || 0)
+    + state.db.deposits.filter((d) => d.portfolioId === p.id && (from == null || d.date >= p.statsFrom)).reduce((a, d) => a + +d.amount, 0);
   // Costos (negativos = pagados). El funding de algunas cerradas no se conoce (BingX coin-M): se cuentan aparte.
   const costs = {
     fees: closed.reduce((a, x) => a + (+x.fees || 0), 0),

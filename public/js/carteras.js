@@ -466,7 +466,7 @@ function viewFutures(p) {
   return `
   <div class="page-head">
     <div><h1><span class="dot" style="display:inline-block;background:${slotColor(p)};margin-right:8px"></span>${esc(p.name)}</h1>
-      <div class="sub">${TYPES.futures}${p.broker ? ' · ' + esc(p.broker) : ''}${upd ? ' · actualizado ' + upd : ''}${synced ? ' · sincronizado' : ''}</div></div>
+      <div class="sub">${TYPES.futures}${p.broker ? ' · ' + esc(p.broker) : ''}${upd ? ' · actualizado ' + upd : ''}${synced ? ' · sincronizado' : ''}${p.statsFrom ? ` · <b title="Las operaciones cerradas antes quedan guardadas pero no cuentan. Se arranca con ${usd(+p.statsBase || 0)} en la cuenta.">contando desde ${fmtDate(p.statsFrom)}</b>` : ''}</div></div>
     <div class="actions"><button class="btn" data-action="new-aporte" data-pid="${p.id}">+ Aporte</button></div>
   </div>
   ${staleNotice(c.acc?.updated, ex)}
