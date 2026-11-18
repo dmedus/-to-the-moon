@@ -184,3 +184,10 @@ test('mergeSnapshot: el cierre parcial se borra cuando llega la posición entera
   db = mergeSnapshot(db, { exchange: 'Bitget', fetched: new Date(10000).toISOString(), accounts: [], open: [], closed: [whole] }, 'futuros-bitget');
   assert.deepEqual(db.futures.map((f) => f.externalId), ['bitget-77']);
 });
+
+test('mergeSnapshot descarta una cerrada guardada con el mismo id que una posición que sigue abierta (cierre parcial)', () => {
+  const base = { portfolios: [], futures: [{ id: 'x', portfolioId: 'futuros-bitunix', externalId: 'bitunix-1', status: 'closed', symbol: 'SOLUSDT', pnl: 2 }] };
+  const open = { externalId: 'bitunix-1', symbol: 'SOLUSDT', side: 'LONG', status: 'open', qty: 1 };
+  const db = mergeSnapshot(base, { exchange: 'Bitunix', fetched: new Date(1000).toISOString(), accounts: [], open: [open], closed: [] }, 'futuros-bitunix');
+  assert.deepEqual(db.futures.map((f) => f.status), ['open']);
+});

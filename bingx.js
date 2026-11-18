@@ -257,7 +257,9 @@ function mergeSnapshot(db, snap, pid = PORTFOLIO_ID) {
   db.futuresAccounts ||= {};
   db.futuresAccounts[pid] = { exchange: snap.exchange, updated: snap.fetched, accounts: snap.accounts };
   const prevOpen = new Map(db.futures.filter((f) => f.portfolioId === pid && f.status === 'open').map((f) => [f.externalId, f]));
-  const kept = db.futures.filter((f) => f.portfolioId !== pid || f.status === 'closed');
+  // Una "cerrada" con el mismo id que una posición que sigue abierta era un cierre parcial guardado antes: se descarta
+  const openNow = new Set(snap.open.map((t) => t.externalId));
+  const kept = db.futures.filter((f) => f.portfolioId !== pid || (f.status === 'closed' && !openNow.has(f.externalId)));
   const byExt = new Map(kept.filter((f) => f.portfolioId === pid).map((f) => [f.externalId, f]));
   for (const t of snap.closed) {
     const rec = byExt.get(t.externalId) || { id: crypto.randomUUID().slice(0, 10), portfolioId: pid, note: '' };

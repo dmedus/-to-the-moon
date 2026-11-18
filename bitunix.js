@@ -106,7 +106,10 @@ async function fetchSnapshot(keys, days = 89) {
   ]);
   const open = [];
   for (const p of (Array.isArray(pos) ? pos : pos?.positionList ?? []).filter((p) => n(p.qty) > 0)) open.push(mapOpen(p, await market(p.symbol)));
-  const closed = [...hist.map(mapClosed), ...open.map(mapPartial).filter(Boolean)];
+  // Solo las cerradas del todo: Bitunix pone en el historial también las que tuvieron un cierre parcial y siguen
+  // abiertas (con el mismo positionId). Esas se ven recién cuando se cierran enteras, con el resultado completo.
+  const openIds = new Set(open.map((o) => String(o._positionId)));
+  const closed = hist.filter((h) => !openIds.has(String(h.positionId))).map(mapClosed);
   for (const o of open) { delete o._realized; delete o._mtime; delete o._positionId; }
 
   const a = (Array.isArray(acc) ? acc : [acc]).find((x) => x?.marginCoin === 'USDT') || {};
