@@ -236,6 +236,36 @@ function resultBanner(c, { what = 'posiciones abiertas', base = c.cost, baseTxt 
   </div>`;
 }
 
+// Estrategia de una cartera: % objetivo por moneda contra lo que hay hoy, y cuánto comprar o vender para llegar.
+// Los dólares sin asignar (USDT/USDC) cuentan en el total y son lo que se usa para comprar.
+const CASH = new Set(['USDT', 'USDC', 'USD', 'FDUSD']);
+function strategyCard(p, c) {
+  const st = p.strategy, targets = st.targets || {};
+  const val = (tk) => c.positions.filter((x) => x.ticker === tk).reduce((a, x) => a + (x.value || 0), 0);
+  const total = c.value || 0;
+  const cash = c.positions.filter((x) => CASH.has(x.ticker)).reduce((a, x) => a + (x.value || 0), 0);
+  const tickers = [...new Set([...Object.keys(targets), ...c.positions.map((x) => x.ticker).filter((t) => !CASH.has(t))])];
+  const rows = tickers.map((tk) => {
+    const goal = (+targets[tk] || 0) / 100, now = val(tk), want = total * goal;
+    return { tk, goal, now, nowPct: total ? now / total : null, want, diff: want - now };
+  });
+  const off = rows.filter((r) => r.goal && Math.abs((r.nowPct ?? 0) - r.goal) > 0.05).length;
+  const action = (d) => (Math.abs(d) < 1 ? '<span class="muted">en objetivo</span>'
+    : d > 0 ? `<span class="pos">Comprar ${usd(d)}</span>` : `<span class="neg">Vender ${usd(-d)}</span>`);
+  return `<div class="card section">
+    <h2>${esc(st.name || 'Estrategia')} <span class="muted small">(objetivo vs. hoy · total ${usd(total)}${cash >= 1 ? ` · ${usd(cash)} en dólares para comprar` : ''})</span></h2>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Moneda</th><th class="num">Objetivo</th><th class="num">Hoy</th><th class="num">Tenés</th><th class="num">Debería haber</th><th class="num">Para llegar</th></tr></thead>
+      <tbody>${rows.map((r) => `<tr>
+        <td class="ticker">${esc(r.tk)}</td><td class="num">${pct(r.goal).replace('+', '')}</td>
+        <td class="num ${r.goal && Math.abs((r.nowPct ?? 0) - r.goal) > 0.05 ? 'neg' : ''}">${pct(r.nowPct).replace('+', '')}</td>
+        <td class="num">${usd(r.now)}</td><td class="num">${usd(r.want)}</td><td class="num">${action(r.diff)}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>
+    <div class="small muted" style="margin-top:8px">${off ? `⚠ ${off} ${off === 1 ? 'moneda se desvía' : 'monedas se desvían'} más de 5 puntos: toca rebalancear. ` : ''}${st.notes ? esc(st.notes) : ''}</div>
+  </div>`;
+}
+
 // Compras y ventas de una moneda o ticker dentro de una cartera (se abre con un clic en la fila)
 function txDetail(p, ticker, qtyFmt) {
   const txs = state.db.transactions.filter((t) => t.portfolioId === p.id && t.ticker === ticker)
@@ -287,7 +317,7 @@ function viewPortfolio(p) {
     ${simple ? '' : kpi('Aportes', usd(c.deposits), autoDep(p) ? (c.cashIn ? `Invertido + ${usd(c.cashIn)} de efectivo` : 'Igual a lo invertido') : null)}
   </div>
   ${c.missing.length ? `<div class="card section small">⚠ Sin cotización para <b>${esc(c.missing.join(', '))}</b> — se valúan al costo. Podés fijar un precio manual en <a href="#/ajustes">Ajustes</a>.</div>` : ''}
-  ${c.positions.length ? allocationCard(p, c) : ''}
+  ${p.strategy ? strategyCard(p, c) : c.positions.length ? allocationCard(p, c) : ''}
   <div class="card section">
     <h2>Cartera${myOrderBtn(p, T)}</h2>
     <div class="table-wrap"><table>
