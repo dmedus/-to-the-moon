@@ -596,3 +596,10 @@ button.jr-cell:not([disabled]) { cursor: pointer; } button.jr-cell:not([disabled
 @media (max-width: 700px) { .jr-cal { grid-template-columns: repeat(7, minmax(0, 1fr)); } .jr-head:nth-child(8), .jr-week { display: none; }
   .jr-cell { min-height: 52px; padding: 4px; } .jr-cell b { font-size: 11px; } .jr-cell .small { display: none; } .jr-min { margin-left: 0; } }
 @media (max-width: 800px) { .tr-grid { grid-template-columns: 1fr; } .tr-big { font-size: 26px; } .tr-arrow { display: none; } .tr-wl b { font-size: 36px; } }
+
+/* Fila de cartera que se abre con el detalle de compras y ventas */
+tr.clickable { cursor: pointer; }
+tr.clickable:hover td { background: var(--row-hover); }
+tr.pos-detail > td { padding: 6px 12px 14px 28px; background: rgba(127,127,127,.04); }
+.detail-table { width: 100%; border-collapse: collapse; }
+.detail-table th, .detail-table td { padding: 4px 8px; }

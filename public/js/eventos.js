@@ -19,7 +19,7 @@ document.addEventListener('click', (e) => {
   const { action, id, pid } = a.dataset;
   const db = state.db;
   // El invitado solo puede mirar (el servidor igual rechaza cualquier cambio suyo)
-  if (!isOwner() && !['alloc-mode', 'ver-regla', 'watch-sel', 'watch-range', 'watch-hrange', 'watch-mode', 'watch-unsort', 'pos-unsort', 'watch-ma', 'watch-tab', 'hist-range', 'diario-period', 'diario-side', 'diario-mes', 'diario-dia'].includes(action)) return; // el invitado solo mira
+  if (!isOwner() && !['alloc-mode', 'ver-regla', 'watch-sel', 'watch-range', 'watch-hrange', 'watch-mode', 'watch-unsort', 'pos-unsort', 'watch-ma', 'watch-tab', 'hist-range', 'diario-period', 'diario-side', 'diario-mes', 'diario-dia', 'pos-detail'].includes(action)) return; // el invitado solo mira
   switch (action) {
     case 'new-tx': return txForm({ portfolioId: pid, ticker: a.dataset.ticker, side: a.dataset.side });
     case 'edit-tx': return txForm({ ...db.transactions.find((t) => t.id === id) });
@@ -27,6 +27,13 @@ document.addEventListener('click', (e) => {
       if (!confirm('¿Borrar esta operación?')) return;
       db.transactions = db.transactions.filter((t) => t.id !== id); save(); return render();
     case 'new-div': return simpleForm('div', { portfolioId: pid });
+    case 'pos-detail': {
+      if (e.target.closest('.grip, a, button')) return; // arrastrar o un botón dentro de la fila no la abre
+      const k = pid + '|' + a.dataset.ticker;
+      state.posOpen ||= {};
+      state.posOpen[k] = !state.posOpen[k];
+      return render();
+    }
     case 'edit-target': return targetForm(a.dataset.ticker);
     case 'edit-div': return simpleForm('div', db.dividends.find((t) => t.id === id));
     case 'del-div':

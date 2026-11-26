@@ -236,6 +236,21 @@ function resultBanner(c, { what = 'posiciones abiertas', base = c.cost, baseTxt 
   </div>`;
 }
 
+// Compras y ventas de una moneda o ticker dentro de una cartera (se abre con un clic en la fila)
+function txDetail(p, ticker, qtyFmt) {
+  const txs = state.db.transactions.filter((t) => t.portfolioId === p.id && t.ticker === ticker)
+    .sort((a, b) => b.date.localeCompare(a.date));
+  if (!txs.length) return '<div class="muted small">Sin operaciones.</div>';
+  return `<table class="detail-table small">
+    <thead><tr><th>Fecha</th><th>Tipo</th><th class="num">Cantidad</th><th class="num">Precio</th><th class="num">Comisión</th><th class="num">Total USD</th><th>Nota</th></tr></thead>
+    <tbody>${txs.map((t) => `<tr>
+      <td>${fmtDate(t.date)}</td><td><span class="tag ${t.side}">${t.side === 'buy' ? 'Compra' : 'Venta'}</span></td>
+      <td class="num">${qtyFmt(+t.qty)}</td><td class="num">${price(unitUSD(t))}</td><td class="num">${t.fee ? usd(+t.fee) : '—'}</td>
+      <td class="num">${usd(+t.qty * unitUSD(t) + (t.side === 'buy' ? 1 : -1) * (+t.fee || 0))}</td><td class="muted">${esc(t.note || '')}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
 function viewPortfolio(p) {
   const c = compute(p);
   const isCedear = p.type === 'cedear', isBond = p.type === 'bonds';
@@ -248,16 +263,19 @@ function viewPortfolio(p) {
   const closed = sortRows('cl-' + p.id, c.closed, 'date');
   const C = 'cl-' + p.id;
   const qtyFmt = (n) => qty(n, p.type === 'crypto' ? 8 : 4);
+  const simple = p.id === 'spot-bitunix'; // la cartera Spot se llena sola: sin aportes, dividendos ni carga a mano
+  const open = (state.posOpen ||= {});
+  const cols = 11 + (isEq ? 1 : 0);
 
   return `
   <div class="page-head">
     <div><h1><span class="dot" style="display:inline-block;background:${slotColor(p)};margin-right:8px"></span>${esc(p.name)}</h1>
       <div class="sub">${TYPES[p.type]}${p.broker ? ' · ' + esc(p.broker) : ''}</div></div>
-    <div class="actions">
+    ${simple ? '' : `<div class="actions">
       <button class="btn" data-action="new-aporte" data-pid="${p.id}">+ Aporte</button>
       <button class="btn" data-action="new-div" data-pid="${p.id}">${isBond ? '+ Renta' : '+ Dividendo'}</button>
       <button class="btn primary" data-action="new-tx" data-pid="${p.id}">+ Operación</button>
-    </div>
+    </div>`}
   </div>
   ${c.positions.length || c.closed.length ? resultBanner(c, isBond ? { side: [['Ventas realizadas', c.realized], ['Renta cobrada', c.divTotal], ['Total histórico', c.unrealized + c.realized + c.divTotal]] } : {}) : ''}
   <div class="kpis">
@@ -265,8 +283,8 @@ function viewPortfolio(p) {
     ${kpi('Invertido', usd(c.cost))}
     ${kpi('No realizado', signed(c.unrealized), c.cost ? pct(c.unrealized / c.cost) : null, cls(c.unrealized))}
     ${kpi('Realizado', signed(c.realized), `${c.closed.length} ventas`, cls(c.realized))}
-    ${kpi(isBond ? 'Renta cobrada' : 'Dividendos', usd(c.divTotal), isBond ? 'Cupones y amortizaciones' : null)}
-    ${kpi('Aportes', usd(c.deposits), autoDep(p) ? (c.cashIn ? `Invertido + ${usd(c.cashIn)} de efectivo` : 'Igual a lo invertido') : null)}
+    ${simple ? '' : kpi(isBond ? 'Renta cobrada' : 'Dividendos', usd(c.divTotal), isBond ? 'Cupones y amortizaciones' : null)}
+    ${simple ? '' : kpi('Aportes', usd(c.deposits), autoDep(p) ? (c.cashIn ? `Invertido + ${usd(c.cashIn)} de efectivo` : 'Igual a lo invertido') : null)}
   </div>
   ${c.missing.length ? `<div class="card section small">⚠ Sin cotización para <b>${esc(c.missing.join(', '))}</b> — se valúan al costo. Podés fijar un precio manual en <a href="#/ajustes">Ajustes</a>.</div>` : ''}
   ${c.positions.length ? allocationCard(p, c) : ''}
@@ -288,7 +306,7 @@ function viewPortfolio(p) {
         ${th(T, 'days', 'Días')}
       </tr></thead>
       <tbody data-reorder="${p.id}" data-tid="${T}">
-      ${rows.length ? rows.map((x) => `<tr data-key="${esc(x.ticker)}">
+      ${rows.length ? rows.map((x) => `<tr data-key="${esc(x.ticker)}" data-action="pos-detail" data-pid="${p.id}" data-ticker="${esc(x.ticker)}" class="clickable" title="Clic para ver las compras y ventas">
         <td class="ticker">${grip()}${esc(x.ticker)}${x.div ? ` <span class="tag" title="${divWord} cobrados">${isBond ? 'renta' : 'div'} ${usd(x.div)}</span>` : ''}
           ${isBond && bondInfoOf(x.ticker)?.name ? `<div class="muted small" style="font-weight:400">${esc(bondInfoOf(x.ticker).name)}</div>` : ''}</td>
         <td class="num"${isCedear ? ` title="Ratio ${num(x.ratio)}:1"` : ''}>${qtyFmt(x.qty)}</td>
@@ -302,7 +320,7 @@ function viewPortfolio(p) {
         ${isEq ? `<td class="num">${targetCell(x)}</td>` : ''}
         <td class="num">${pct(x.weight).replace('+', '')}<span class="weightbar"><span style="width:${x.weight * 100}%;background:${slotColor(p)}"></span></span></td>
         <td class="num">${x.days ?? '—'}</td>
-      </tr>`).join('') + (c.cashIn ? `<tr>
+      </tr>${open[p.id + '|' + x.ticker] ? `<tr class="pos-detail"><td colspan="${cols}">${txDetail(p, x.ticker, qtyFmt)}</td></tr>` : ''}`).join('') + (c.cashIn ? `<tr>
         <td class="ticker">Efectivo <span class="muted small" style="font-weight:400">USD</span></td><td></td><td></td><td></td><td></td><td></td>
         <td class="num">${usd(c.cashIn)}</td><td></td><td></td>${isEq ? '<td></td>' : ''}
         <td class="num">${pct(c.cashIn / c.value).replace('+', '')}<span class="weightbar"><span style="width:${(c.cashIn / c.value) * 100}%;background:${slotColor(p)}"></span></span></td><td></td>
