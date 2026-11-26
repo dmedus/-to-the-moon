@@ -148,9 +148,10 @@ async function spotPrice(symbol) {
   return Number(d?.code) === 0 ? n(d.data) : null;
 }
 
-// Arma las operaciones de una moneda a partir de las órdenes llenadas y el saldo actual. Lo que el historial no
-// explica se ajusta: si sobra, una compra al costo promedio (o al precio de hoy); si falta (se movió, p. ej. a Nexo),
-// una venta al costo promedio, que no genera ganancia ni pérdida.
+// Arma las operaciones de una moneda a partir de las órdenes llenadas y el saldo actual. La cartera junta Bitunix
+// con otras plataformas (p. ej. Nexo): si en Bitunix hay menos que lo comprado, se asume que se movió y la cartera lo
+// sigue mostrando (una venta o un retiro fuera de Bitunix se carga a mano). Si hay más (depósito), se agrega una
+// compra al costo promedio, o al precio de hoy si no hay historial.
 function spotTxs(a, balance, price, orders, firstSeen, now) {
   const txs = [];
   const tx = (ext, side, t, qty, p, fee, note) => txs.push({
@@ -175,10 +176,7 @@ function spotTxs(a, balance, price, orders, firstSeen, now) {
     tx(e.ext, e.side, e.t, e.qty, e.p, e.fee, e.note);
   }
   const diff = balance - qty, avg = qty ? cost / qty : null;
-  if (Math.abs(diff) * (price ?? 0) >= 1) {
-    if (diff > 0) tx(`bitunix-spot-${a}-ajuste`, 'buy', firstSeen, diff, avg ?? price, 0, 'Ajuste al saldo de Bitunix (depósito o transferencia): costo estimado');
-    else tx(`bitunix-spot-${a}-ajuste`, 'sell', now, -diff, avg ?? price, 0, 'Ajuste al saldo de Bitunix (retiro o transferencia, p. ej. a Nexo): sin resultado');
-  }
+  if (diff * (price ?? 0) >= 1) tx(`bitunix-spot-${a}-ajuste`, 'buy', firstSeen, diff, avg ?? price, 0, 'Ajuste al saldo de Bitunix (depósito o transferencia): costo estimado');
   return txs;
 }
 
@@ -188,9 +186,11 @@ async function fetchSpot(keys, prev = {}) {
   const bal = {};
   for (const b of list ?? []) { const q = (n(b.balance) ?? 0) + (n(b.balanceLocked) ?? 0); if (q) bal[b.coin] = (bal[b.coin] || 0) + q; }
   const firstSeen = { ...(prev.firstSeen || {}) }, txs = [];
-  for (const a of Object.keys(bal)) {
+  // También las monedas que ya se vieron y hoy no están en Bitunix (se movieron): su historial sigue contando
+  for (const a of new Set([...Object.keys(bal), ...Object.keys(firstSeen).filter((x) => !STABLE.has(x))])) {
+    bal[a] ||= 0;
     const price = STABLE.has(a) ? 1 : await spotPrice(a + 'USDT');
-    if (price == null || bal[a] * price < 1) continue; // polvo o moneda sin par contra USDT
+    if (price == null || (!firstSeen[a] && bal[a] * price < 1)) continue; // polvo o moneda sin par contra USDT
     firstSeen[a] ||= day(now);
     const orders = [];
     if (!STABLE.has(a)) {

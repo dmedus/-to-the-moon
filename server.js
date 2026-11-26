@@ -425,7 +425,7 @@ async function syncBitunix(uid, keys) {
       if (!has) {
         const used = new Set(db.portfolios.map((p) => p.slot));
         let slot = 1; while (used.has(slot) && slot < 8) slot++;
-        db.portfolios.push({ id: bitunix.SPOT_ID, name: 'Cripto Bitunix', type: 'crypto', broker: 'Bitunix', slot });
+        db.portfolios.push({ id: bitunix.SPOT_ID, name: 'Spot', type: 'crypto', broker: 'Bitunix', slot });
       }
       // Las operaciones sincronizadas se reemplazan enteras; las cargadas a mano en esa cartera se conservan
       db.transactions = db.transactions.filter((t) => !(t.portfolioId === bitunix.SPOT_ID && t.externalId)).concat(s.txs);
