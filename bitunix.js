@@ -119,4 +119,91 @@ async function fetchSnapshot(keys, days = 89) {
   return { exchange: 'Bitunix', fetched: new Date().toISOString(), accounts, open, closed };
 }
 
-module.exports = { fetchSnapshot, PORTFOLIO_ID, _test: { sign, mapOpen, mapClosed, mapPartial } }; // _test: para test/
+// ---------- Spot (solo lectura) ----------
+// Otro dominio y la misma firma. Las consultas privadas que se usan no llevan parámetros en la URL:
+// el saldo es un GET sin parámetros y el historial es un POST con el JSON (sin espacios) dentro de la firma.
+const SPOT_URL = 'https://openapi.bitunix.com';
+const SPOT_ID = 'spot-bitunix';
+const STABLE = new Set(['USDT', 'USDC', 'FDUSD']);
+const day = (t) => new Date(t).toISOString().slice(0, 10);
+const time = (x) => (/^\d+$/.test(String(x)) ? Number(x) : Date.parse(x));
+
+function spotClient(keys) {
+  return async function request(method, apiPath, body = null) {
+    const raw = body ? JSON.stringify(body) : '';
+    const nonce = crypto.randomBytes(16).toString('hex'), ts = String(Date.now());
+    const res = await fetch(SPOT_URL + apiPath, {
+      method, body: raw || undefined,
+      headers: { 'api-key': keys.key, nonce, timestamp: ts, sign: sign(keys, nonce, ts, {}, raw), 'Content-Type': 'application/json', language: 'en-US' },
+      signal: AbortSignal.timeout(10000),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data || Number(data.code) !== 0) throw new Error(`Bitunix spot ${res.status} ${data?.code ?? ''}: ${data?.msg ?? ''}`);
+    return data.data;
+  };
+}
+async function spotPrice(symbol) {
+  const res = await fetch(`${SPOT_URL}/api/spot/v1/market/last_price?symbol=${encodeURIComponent(symbol)}`, { signal: AbortSignal.timeout(10000) }).catch(() => null);
+  const d = await res?.json().catch(() => null);
+  return Number(d?.code) === 0 ? n(d.data) : null;
+}
+
+// Arma las operaciones de una moneda a partir de las órdenes llenadas y el saldo actual. Lo que el historial no
+// explica se ajusta: si sobra, una compra al costo promedio (o al precio de hoy); si falta (se movió, p. ej. a Nexo),
+// una venta al costo promedio, que no genera ganancia ni pérdida.
+function spotTxs(a, balance, price, orders, firstSeen, now) {
+  const txs = [];
+  const tx = (ext, side, t, qty, p, fee, note) => txs.push({
+    id: ext, externalId: ext, portfolioId: SPOT_ID, side, ticker: a, date: day(t), qty, ratio: 1, price: p, currency: 'USD', fee, note,
+  });
+  if (STABLE.has(a)) { tx(`bitunix-spot-${a}`, 'buy', firstSeen, balance, 1, 0, 'Saldo en Bitunix'); return txs; }
+  const ev = [];
+  for (const o of orders) {
+    const qty = n(o.dealVolume), amount = n(o.dealAmount);
+    if (!qty || !amount) continue;
+    const p = amount / qty, buy = String(o.side) === '2', t = time(o.ctime);
+    const fee = n(o.fee) ?? 0, feeUsd = o.feeCoin === a ? fee * p : fee; // la comisión viene en la moneda recibida
+    ev.push(buy
+      ? { ext: `bitunix-spot-${o.orderId}`, side: 'buy', t, qty: o.feeCoin === a ? qty - fee : qty, p, fee: feeUsd, note: `Compra en Bitunix (${o.symbol})` }
+      : { ext: `bitunix-spot-${o.orderId}`, side: 'sell', t, qty, p, fee: feeUsd, note: `Venta en Bitunix (${o.symbol})` });
+  }
+  ev.sort((x, y) => day(x.t).localeCompare(day(y.t)) || (x.side === y.side ? x.t - y.t : x.side === 'buy' ? -1 : 1));
+  let qty = 0, cost = 0;
+  for (const e of ev) {
+    if (e.side === 'buy') { qty += e.qty; cost += e.qty * e.p + e.fee; }
+    else { const q = Math.min(e.qty, qty), avg = qty ? cost / qty : 0; cost -= q * avg; qty -= q; if (qty < 1e-9) { qty = 0; cost = 0; } }
+    tx(e.ext, e.side, e.t, e.qty, e.p, e.fee, e.note);
+  }
+  const diff = balance - qty, avg = qty ? cost / qty : null;
+  if (Math.abs(diff) * (price ?? 0) >= 1) {
+    if (diff > 0) tx(`bitunix-spot-${a}-ajuste`, 'buy', firstSeen, diff, avg ?? price, 0, 'Ajuste al saldo de Bitunix (depósito o transferencia): costo estimado');
+    else tx(`bitunix-spot-${a}-ajuste`, 'sell', now, -diff, avg ?? price, 0, 'Ajuste al saldo de Bitunix (retiro o transferencia, p. ej. a Nexo): sin resultado');
+  }
+  return txs;
+}
+
+async function fetchSpot(keys, prev = {}) {
+  const request = spotClient(keys), now = Date.now();
+  const list = await request('GET', '/api/spot/v1/user/account');
+  const bal = {};
+  for (const b of list ?? []) { const q = (n(b.balance) ?? 0) + (n(b.balanceLocked) ?? 0); if (q) bal[b.coin] = (bal[b.coin] || 0) + q; }
+  const firstSeen = { ...(prev.firstSeen || {}) }, txs = [];
+  for (const a of Object.keys(bal)) {
+    const price = STABLE.has(a) ? 1 : await spotPrice(a + 'USDT');
+    if (price == null || bal[a] * price < 1) continue; // polvo o moneda sin par contra USDT
+    firstSeen[a] ||= day(now);
+    const orders = [];
+    if (!STABLE.has(a)) {
+      for (let page = 1; page <= 20; page++) {
+        const d = await request('POST', '/api/spot/v1/order/history/page', { symbol: a + 'USDT', page, pageSize: 100 });
+        const rows = d?.data ?? [];
+        orders.push(...rows);
+        if (rows.length < 100) break;
+      }
+    }
+    txs.push(...spotTxs(a, bal[a], price, orders, firstSeen[a], now));
+  }
+  return { exchange: 'Bitunix', fetched: new Date(now).toISOString(), txs, state: { firstSeen } };
+}
+
+module.exports = { fetchSnapshot, fetchSpot, PORTFOLIO_ID, SPOT_ID, _test: { sign, mapOpen, mapClosed, mapPartial, spotTxs } }; // _test: para test/

@@ -408,10 +408,32 @@ async function syncBitget(uid, keys) {
   writeDb(bingx.mergeSnapshot(readDb(uid), snap, bitget.PORTFOLIO_ID), uid);
   return { updated: snap.fetched };
 }
+// Bitunix: futuros y spot con la misma clave. Falla solo si fallan las dos (la clave puede no tener permiso de spot).
 async function syncBitunix(uid, keys) {
-  const snap = await bitunix.fetchSnapshot(keys);
-  writeDb(bingx.mergeSnapshot(readDb(uid), snap, bitunix.PORTFOLIO_ID), uid);
-  return { updated: snap.fetched };
+  const stateFile = path.join(userDir(uid), 'bitunix-spot.json'); // fechas en que apareció cada moneda
+  let prev = {};
+  try { prev = JSON.parse(fs.readFileSync(stateFile, 'utf8')); } catch { /* primera vez */ }
+  const [fut, spot] = await Promise.allSettled([bitunix.fetchSnapshot(keys), bitunix.fetchSpot(keys, prev)]);
+  if (fut.status === 'rejected' && spot.status === 'rejected') throw fut.reason;
+  let db = readDb(uid);
+  if (fut.status === 'fulfilled') db = bingx.mergeSnapshot(db, fut.value, bitunix.PORTFOLIO_ID);
+  else console.error(`[bitunix ${uid}] futuros:`, fut.reason.message);
+  if (spot.status === 'fulfilled') {
+    const s = spot.value;
+    const has = db.portfolios.some((p) => p.id === bitunix.SPOT_ID);
+    if (has || s.txs.length) {
+      if (!has) {
+        const used = new Set(db.portfolios.map((p) => p.slot));
+        let slot = 1; while (used.has(slot) && slot < 8) slot++;
+        db.portfolios.push({ id: bitunix.SPOT_ID, name: 'Cripto Bitunix', type: 'crypto', broker: 'Bitunix', slot });
+      }
+      // Las operaciones sincronizadas se reemplazan enteras; las cargadas a mano en esa cartera se conservan
+      db.transactions = db.transactions.filter((t) => !(t.portfolioId === bitunix.SPOT_ID && t.externalId)).concat(s.txs);
+    }
+    fs.writeFileSync(stateFile, JSON.stringify(s.state));
+  } else console.error(`[bitunix ${uid}] spot:`, spot.reason.message);
+  writeDb(db, uid);
+  return { updated: new Date().toISOString() };
 }
 // Binance: futuros y spot con la misma clave. Cada parte es opcional (hay quien tiene solo spot):
 // falla la sincronización solo si fallan las dos. Una cartera se crea recién cuando hay algo para mostrar.

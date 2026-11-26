@@ -45,3 +45,26 @@ test('cierre parcial: lo realizado de la abierta, sin la comisión y el funding 
   assert.equal(p.close, 777);
   assert.equal(mapPartial(mapOpen({ positionId: '6', qty: '1', realizedPNL: '0' })), null);
 });
+
+test('spot: compras y ventas con costo promedio, y lo movido afuera (p. ej. a Nexo) sale sin resultado', () => {
+  const { _test: { spotTxs } } = require('../bitunix');
+  const orders = [
+    { orderId: 'a', symbol: 'BTCUSDT', side: 2, dealVolume: '0.01', dealAmount: '600', fee: '0.00001', feeCoin: 'BTC', ctime: '2026-11-20T10:00:00Z' },
+    { orderId: 'b', symbol: 'BTCUSDT', side: 1, dealVolume: '0.002', dealAmount: '130', fee: '0.13', feeCoin: 'USDT', ctime: '2026-11-21T10:00:00Z' },
+  ];
+  // Compró 0,00999 neto, vendió 0,002 → quedan 0,00799; en Bitunix hay 0,005 → se movieron 0,00299
+  const txs = spotTxs('BTC', 0.005, 62000, orders, '2026-11-20', Date.parse('2026-11-26T00:00:00Z'));
+  assert.equal(txs.length, 3);
+  const [buy, sell, out] = txs;
+  assert.equal(buy.side, 'buy'); close(buy.qty, 0.00999); close(buy.fee, 0.6); assert.equal(buy.portfolioId, 'spot-bitunix');
+  assert.equal(sell.side, 'sell'); close(sell.price, 65000); close(sell.fee, 0.13);
+  assert.equal(out.side, 'sell'); close(out.qty, 0.00299); close(out.price, 600 / 0.00999);
+});
+
+test('spot: USDT es saldo a precio 1, y monedas depositadas sin historial van al precio del día', () => {
+  const { _test: { spotTxs } } = require('../bitunix');
+  const [u] = spotTxs('USDT', 500, 1, [], '2026-11-26', Date.now());
+  assert.equal(u.qty, 500); assert.equal(u.price, 1); assert.equal(u.externalId, 'bitunix-spot-USDT');
+  const [e] = spotTxs('ETH', 0.2, 3000, [], '2026-11-26', Date.now());
+  assert.equal(e.side, 'buy'); assert.equal(e.price, 3000); close(e.qty, 0.2);
+});
